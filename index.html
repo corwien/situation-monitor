@@ -5757,13 +5757,19 @@
                     .attr('stroke', '#0f5040')
                     .attr('stroke-width', 0.5);
 
-                // Add undersea cables as SVG paths
-                if (mapLayers.cables) {
+                // Add undersea cables as SVG paths (global view only)
+                if (mapLayers.cables && !isUSView) {
                     const cableGroup = svg.append('g').attr('class', 'cables-layer');
                     UNDERSEA_CABLES.forEach(cable => {
                         const lineGenerator = d3.line()
-                            .x(d => projection(d)[0])
-                            .y(d => projection(d)[1])
+                            .x(d => {
+                                const p = projection(d);
+                                return p ? p[0] : 0;
+                            })
+                            .y(d => {
+                                const p = projection(d);
+                                return p ? p[1] : 0;
+                            })
                             .curve(d3.curveBasis);
 
                         const points = cable.points.map(p => [p[0], p[1]]);
@@ -5775,12 +5781,14 @@
                     });
                 }
 
-                // Add conflict zone boundaries
-                if (mapLayers.conflicts) {
+                // Add conflict zone boundaries (global view only)
+                if (mapLayers.conflicts && !isUSView) {
                     const conflictGroup = svg.append('g').attr('class', 'conflicts-layer');
                     CONFLICT_ZONES.forEach(zone => {
                         // Create closed polygon path
                         const points = zone.coords.map(c => projection([c[0], c[1]]));
+                        // Skip if any point is null (outside projection bounds)
+                        if (points.some(p => !p)) return;
                         if (points.length > 0) {
                             const pathData = 'M' + points.map(p => p.join(',')).join('L') + 'Z';
                             const isHigh = zone.intensity === 'high';
@@ -5806,10 +5814,12 @@
 
             // Helper to convert lon/lat to percentage using the projection
             const toPercent = (lon, lat) => {
-                const [x, y] = projection([lon, lat]);
+                const projected = projection([lon, lat]);
+                // geoAlbersUsa returns null for points outside US
+                if (!projected) return null;
                 return {
-                    x: (x / width) * 100,
-                    y: (y / height) * 100
+                    x: (projected[0] / width) * 100,
+                    y: (projected[1] / height) * 100
                 };
             };
 
@@ -5852,10 +5862,11 @@
                 });
             }
 
-            // Conflict zone labels
-            if (mapLayers.conflicts) {
+            // Conflict zone labels (global view only)
+            if (mapLayers.conflicts && !isUSView) {
                 CONFLICT_ZONES.forEach(zone => {
                     const pos = toPercent(zone.labelPos.lon, zone.labelPos.lat);
+                    if (!pos) return;
                     const intensityClass = zone.intensity === 'high' ? 'high-intensity' : '';
                     // Store zone data for popup
                     const zoneData = encodeURIComponent(JSON.stringify(zone));
@@ -5871,10 +5882,11 @@
                 });
             }
 
-            // Military base markers
-            if (mapLayers.bases) {
+            // Military base markers (global view only)
+            if (mapLayers.bases && !isUSView) {
                 MILITARY_BASES.forEach(base => {
                     const pos = toPercent(base.lon, base.lat);
+                    if (!pos) return;
                     overlaysHTML += `
                         <div class="military-base ${base.type}" style="left: ${pos.x}%; top: ${pos.y}%;" title="${base.name}">
                             <div class="base-icon ${base.type}"></div>
@@ -5884,10 +5896,11 @@
                 });
             }
 
-            // Nuclear facility markers
-            if (mapLayers.nuclear) {
+            // Nuclear facility markers (global view only)
+            if (mapLayers.nuclear && !isUSView) {
                 NUCLEAR_FACILITIES.forEach(facility => {
                     const pos = toPercent(facility.lon, facility.lat);
+                    if (!pos) return;
                     const isWeapons = facility.type === 'weapons' || facility.type === 'enrichment';
                     overlaysHTML += `
                         <div class="nuclear-facility" style="left: ${pos.x}%; top: ${pos.y}%;" title="${facility.name} (${facility.type})">
@@ -5898,68 +5911,75 @@
                 });
             }
 
-            // Cyber threat zones
-            CYBER_REGIONS.forEach(cz => {
-                const pos = toPercent(cz.lon, cz.lat);
-                // Randomly determine if this zone is "active" (simulated)
-                const isActive = Math.random() > 0.6;
+            // Cyber threat zones (global view only)
+            if (!isUSView) {
+                CYBER_REGIONS.forEach(cz => {
+                    const pos = toPercent(cz.lon, cz.lat);
+                    if (!pos) return;
+                    // Randomly determine if this zone is "active" (simulated)
+                    const isActive = Math.random() > 0.6;
 
-                // Store cyber zone data
-                const czData = encodeURIComponent(JSON.stringify({
-                    ...cz,
-                    isActive
-                }));
+                    // Store cyber zone data
+                    const czData = encodeURIComponent(JSON.stringify({
+                        ...cz,
+                        isActive
+                    }));
 
-                overlaysHTML += `
-                    <div class="cyber-zone ${isActive ? 'active' : ''}"
-                         style="left: ${pos.x}%; top: ${pos.y}%;"
-                         data-cyber-id="${cz.id}"
-                         data-cyber-info="${czData}"
-                         onclick="showCyberPopup(event, '${cz.id}')">
-                        <div class="cyber-icon"></div>
-                        <div class="cyber-label">${cz.group}</div>
-                    </div>
-                `;
-            });
+                    overlaysHTML += `
+                        <div class="cyber-zone ${isActive ? 'active' : ''}"
+                             style="left: ${pos.x}%; top: ${pos.y}%;"
+                             data-cyber-id="${cz.id}"
+                             data-cyber-info="${czData}"
+                             onclick="showCyberPopup(event, '${cz.id}')">
+                            <div class="cyber-icon"></div>
+                            <div class="cyber-label">${cz.group}</div>
+                        </div>
+                    `;
+                });
+            }
 
-            // Shipping chokepoints
-            SHIPPING_CHOKEPOINTS.forEach(cp => {
-                const pos = toPercent(cp.lon, cp.lat);
+            // Shipping chokepoints (global view only)
+            if (!isUSView) {
+                SHIPPING_CHOKEPOINTS.forEach(cp => {
+                    const pos = toPercent(cp.lon, cp.lat);
+                    if (!pos) return;
 
-                // Find matching headlines for this chokepoint
-                const matchedHeadlines = allNews.filter(item => {
-                    const title = (item.title || '').toLowerCase();
-                    return cp.keywords.some(kw => title.includes(kw));
-                }).slice(0, 5).map(item => ({
-                    title: item.title,
-                    link: item.link,
-                    source: item.source
-                }));
+                    // Find matching headlines for this chokepoint
+                    const matchedHeadlines = allNews.filter(item => {
+                        const title = (item.title || '').toLowerCase();
+                        return cp.keywords.some(kw => title.includes(kw));
+                    }).slice(0, 5).map(item => ({
+                        title: item.title,
+                        link: item.link,
+                        source: item.source
+                    }));
 
-                const isAlert = matchedHeadlines.length > 0;
+                    const isAlert = matchedHeadlines.length > 0;
 
-                // Store chokepoint data as JSON
-                const cpData = encodeURIComponent(JSON.stringify({
-                    ...cp,
-                    isAlert,
-                    headlines: matchedHeadlines
-                }));
+                    // Store chokepoint data as JSON
+                    const cpData = encodeURIComponent(JSON.stringify({
+                        ...cp,
+                        isAlert,
+                        headlines: matchedHeadlines
+                    }));
 
-                overlaysHTML += `
-                    <div class="chokepoint ${isAlert ? 'alert' : ''}"
-                         style="left: ${pos.x}%; top: ${pos.y}%;"
-                         data-chokepoint-id="${cp.id}"
-                         data-chokepoint-info="${cpData}"
-                         onclick="showChokepointPopup(event, '${cp.id}')">
-                        <div class="chokepoint-icon"></div>
-                        <div class="chokepoint-label">${cp.name}</div>
-                    </div>
-                `;
-            });
+                    overlaysHTML += `
+                        <div class="chokepoint ${isAlert ? 'alert' : ''}"
+                             style="left: ${pos.x}%; top: ${pos.y}%;"
+                             data-chokepoint-id="${cp.id}"
+                             data-chokepoint-info="${cpData}"
+                             onclick="showChokepointPopup(event, '${cp.id}')">
+                            <div class="chokepoint-icon"></div>
+                            <div class="chokepoint-label">${cp.name}</div>
+                        </div>
+                    `;
+                });
+            }
 
-            // Earthquake markers
+            // Earthquake markers (show in both views, but only if in visible area)
             earthquakes.slice(0, 10).forEach((eq, index) => {
                 const pos = toPercent(eq.lon, eq.lat);
+                if (!pos) return; // Skip if outside projection bounds
                 const isMajor = eq.mag >= 6.0;
 
                 // Store earthquake data
@@ -5985,53 +6005,57 @@
                 `;
             });
 
-            // Intel hotspots with breaking news pulse for high activity
-            INTEL_HOTSPOTS.forEach(spot => {
-                const activity = activityData[spot.id] || { level: 'low', score: 0, headlines: [] };
-                const pos = toPercent(spot.lon, spot.lat);
-                // Store activity data as JSON in data attribute (including new detailed info)
-                const activityJson = encodeURIComponent(JSON.stringify({
-                    ...activity,
-                    name: spot.name,
-                    subtext: spot.subtext,
-                    lat: spot.lat,
-                    lon: spot.lon,
-                    description: spot.description || '',
-                    agencies: spot.agencies || [],
-                    status: spot.status || ''
-                }));
+            // Intel hotspots with breaking news pulse for high activity (global view only)
+            if (!isUSView) {
+                INTEL_HOTSPOTS.forEach(spot => {
+                    const activity = activityData[spot.id] || { level: 'low', score: 0, headlines: [] };
+                    const pos = toPercent(spot.lon, spot.lat);
+                    if (!pos) return;
+                    // Store activity data as JSON in data attribute (including new detailed info)
+                    const activityJson = encodeURIComponent(JSON.stringify({
+                        ...activity,
+                        name: spot.name,
+                        subtext: spot.subtext,
+                        lat: spot.lat,
+                        lon: spot.lon,
+                        description: spot.description || '',
+                        agencies: spot.agencies || [],
+                        status: spot.status || ''
+                    }));
 
-                // Add breaking news pulse for high activity hotspots
-                if (activity.level === 'high' && activity.headlines.length > 0) {
+                    // Add breaking news pulse for high activity hotspots
+                    if (activity.level === 'high' && activity.headlines.length > 0) {
+                        overlaysHTML += `
+                            <div class="news-pulse" style="left: ${pos.x}%; top: ${pos.y}%;">
+                                <div class="news-pulse-ring"></div>
+                                <div class="news-pulse-ring"></div>
+                                <div class="news-pulse-ring"></div>
+                                <div class="news-pulse-label">Breaking</div>
+                            </div>
+                        `;
+                    }
+
                     overlaysHTML += `
-                        <div class="news-pulse" style="left: ${pos.x}%; top: ${pos.y}%;">
-                            <div class="news-pulse-ring"></div>
-                            <div class="news-pulse-ring"></div>
-                            <div class="news-pulse-ring"></div>
-                            <div class="news-pulse-label">Breaking</div>
+                        <div class="hotspot ${activity.level}"
+                             style="left: ${pos.x}%; top: ${pos.y}%;"
+                             data-hotspot-id="${spot.id}"
+                             data-hotspot-activity="${activityJson}"
+                             onclick="showHotspotPopup(event, '${spot.id}')">
+                            <div class="hotspot-dot"></div>
+                            <div class="hotspot-label">
+                                ${spot.name}
+                                <div class="hotspot-info">${spot.subtext}</div>
+                            </div>
                         </div>
                     `;
-                }
+                });
+            }
 
-                overlaysHTML += `
-                    <div class="hotspot ${activity.level}"
-                         style="left: ${pos.x}%; top: ${pos.y}%;"
-                         data-hotspot-id="${spot.id}"
-                         data-hotspot-activity="${activityJson}"
-                         onclick="showHotspotPopup(event, '${spot.id}')">
-                        <div class="hotspot-dot"></div>
-                        <div class="hotspot-label">
-                            ${spot.name}
-                            <div class="hotspot-info">${spot.subtext}</div>
-                        </div>
-                    </div>
-                `;
-            });
-
-            // Custom monitor hotspots (user-created)
+            // Custom monitor hotspots (user-created, show in both views if in visible area)
             const customHotspots = getMonitorHotspots(allNews);
             customHotspots.forEach(monitor => {
                 const pos = toPercent(monitor.lon, monitor.lat);
+                if (!pos) return; // Skip if outside projection bounds
                 const matchData = encodeURIComponent(JSON.stringify({
                     id: monitor.id,
                     name: monitor.name,
