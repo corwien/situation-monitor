@@ -543,15 +543,15 @@ export async function fetchSituationNews(keywords, limit = 10) {
 export async function fetchIntelFeed() {
     const items = [];
 
-    // GDELT queries for intelligence-related news
+    // GDELT queries for intelligence-related news (parentheses only around OR terms)
     const queries = [
         { query: '(military OR defense OR pentagon)', topics: ['DEFENSE'], regions: ['US'] },
         { query: '(intelligence OR espionage OR CIA)', topics: ['INTEL'], regions: ['US'] },
         { query: '(cyberattack OR ransomware OR hacking)', topics: ['CYBER'], regions: [] },
-        { query: '(russia ukraine war)', topics: ['CONFLICT'], regions: ['EUROPE'] },
-        { query: '(china taiwan military)', topics: ['CONFLICT'], regions: ['APAC'] },
-        { query: '(iran nuclear sanctions)', topics: ['NUCLEAR', 'DIPLO'], regions: ['MENA'] },
-        { query: '(north korea missile)', topics: ['NUCLEAR'], regions: ['APAC'] }
+        { query: 'russia (ukraine OR war OR invasion)', topics: ['CONFLICT'], regions: ['EUROPE'] },
+        { query: 'china (taiwan OR military)', topics: ['CONFLICT'], regions: ['APAC'] },
+        { query: 'iran (nuclear OR sanctions)', topics: ['NUCLEAR', 'DIPLO'], regions: ['MENA'] },
+        { query: '"north korea" (missile OR nuclear)', topics: ['NUCLEAR'], regions: ['APAC'] }
     ];
 
     try {
