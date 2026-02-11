@@ -41,12 +41,12 @@ function hasFinnhubApiKey(): boolean {
  * Provides realistic market data for demonstration purposes
  */
 const DEMO_DATA = {
-	// Index ETFs approximations (based on typical values)
+	// Index ETFs (raw ETF prices, will be converted to index values)
 	indices: {
-		'DIA': { c: 43850, d: 125.5, dp: 0.29 },    // Dow ~ DIA * 0.1
-		'SPY': { c: 605.50, d: 1.25, dp: 0.21 },    // S&P 500
-		'QQQ': { c: 528.75, d: 2.15, dp: 0.41 },    // NASDAQ-100
-		'IWM': { c: 223.40, d: -0.85, dp: -0.38 }   // Russell 2000
+		'DIA': { c: 438.50, d: 1.25, dp: 0.29 },    // Dow ETF
+		'SPY': { c: 605.50, d: 1.25, dp: 0.21 },    // S&P 500 ETF
+		'QQQ': { c: 615.00, d: 2.50, dp: 0.41 },    // NASDAQ-100 ETF (~23,000 / 37.5)
+		'IWM': { c: 223.40, d: -0.85, dp: -0.38 }   // Russell 2000 ETF
 	},
 	// Sector ETFs
 	sectors: {
@@ -84,6 +84,18 @@ const INDEX_ETF_MAP: Record<string, string> = {
 	'^GSPC': 'SPY', // S&P 500 -> SPDR S&P 500 ETF
 	'^IXIC': 'QQQ', // NASDAQ -> Invesco QQQ (NASDAQ-100)
 	'^RUT': 'IWM' // Russell 2000 -> iShares Russell 2000 ETF
+};
+
+/**
+ * ETF to Index conversion factors
+ * Since we fetch ETF prices but want to display actual index values,
+ * we multiply ETF prices by these approximate conversion factors
+ */
+const ETF_TO_INDEX_MULTIPLIERS: Record<string, number> = {
+	'DIA': 100,    // DIA ETF price * 100 ≈ Dow Jones
+	'SPY': 10,     // SPY ETF price * 10 ≈ S&P 500
+	'QQQ': 37.5,   // QQQ ETF price * 37.5 ≈ NASDAQ Composite
+	'IWM': 8.5     // IWM ETF price * 8.5 ≈ Russell 2000
 };
 
 /**
@@ -176,11 +188,13 @@ export async function fetchIndices(): Promise<MarketItem[]> {
 		INDICES.map((i) => {
 			const etfSymbol = INDEX_ETF_MAP[i.symbol] || i.symbol;
 			const demo = DEMO_DATA.indices[etfSymbol as keyof typeof DEMO_DATA.indices];
+			const multiplier = ETF_TO_INDEX_MULTIPLIERS[etfSymbol] || 1;
 			return {
 				symbol: i.symbol,
 				name: i.name,
-				price: demo?.c ?? NaN,
-				change: demo?.d ?? NaN,
+				// Convert demo ETF price to index value
+				price: (demo?.c ?? NaN) * multiplier,
+				change: (demo?.d ?? NaN) * multiplier,
 				changePercent: demo?.dp ?? NaN,
 				type: 'index' as const
 			};
@@ -198,7 +212,7 @@ export async function fetchIndices(): Promise<MarketItem[]> {
 			INDICES.map(async (index) => {
 				const etfSymbol = INDEX_ETF_MAP[index.symbol] || index.symbol;
 				const quote = await fetchFinnhubQuote(etfSymbol);
-				return { index, quote };
+				return { index, quote, etfSymbol };
 			})
 		);
 
@@ -209,14 +223,21 @@ export async function fetchIndices(): Promise<MarketItem[]> {
 			return createDemoIndices();
 		}
 
-		return quotes.map(({ index, quote }) => ({
-			symbol: index.symbol,
-			name: index.name,
-			price: quote?.c ?? NaN,
-			change: quote?.d ?? NaN,
-			changePercent: quote?.dp ?? NaN,
-			type: 'index' as const
-		}));
+		// Convert ETF prices to actual index values
+		return quotes.map(({ index, quote, etfSymbol }) => {
+			const multiplier = ETF_TO_INDEX_MULTIPLIERS[etfSymbol] || 1;
+			return {
+				symbol: index.symbol,
+				name: index.name,
+				// Convert ETF price to index value
+				price: (quote?.c ?? NaN) * multiplier,
+				// Change amount also needs conversion
+				change: (quote?.d ?? NaN) * multiplier,
+				// Percent change stays the same
+				changePercent: quote?.dp ?? NaN,
+				type: 'index' as const
+			};
+		});
 	} catch (error) {
 		logger.error('Markets API', 'Error fetching indices, using demo data:', error);
 		return createDemoIndices();
