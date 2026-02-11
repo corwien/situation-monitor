@@ -222,6 +222,79 @@
 		svg.attr('viewBox', `0 0 ${WIDTH} ${HEIGHT}`);
 
 		mapGroup = svg.append('g').attr('id', 'mapGroup');
+		
+		// ============================================================================
+		// LABEL PLACEMENT MANAGEMENT
+		// Track placed labels to prevent overlapping
+		// ============================================================================
+		const placedLabels: Array<{ x: number; y: number; width: number; height: number }> = [];
+		
+		/**
+		 * Check if a new label would overlap with existing ones
+		 * Uses simple bounding box collision detection with padding
+		 */
+		function wouldOverlap(x: number, y: number, width: number, height: number, padding = 2): boolean {
+			for (const label of placedLabels) {
+				if (
+					x < label.x + label.width + padding &&
+					x + width + padding > label.x &&
+					y < label.y + label.height + padding &&
+					y + height + padding > label.y
+				) {
+					return true;
+				}
+			}
+			return false;
+		}
+		
+		/**
+		 * Try different positions for a label to find non-overlapping placement
+		 * Positions tried in order: right, left, top, bottom
+		 * Returns position info or null if all positions overlap
+		 */
+		function findLabelPosition(
+			x: number, 
+			y: number, 
+			text: string, 
+			fontSize: number
+		): { x: number; y: number; anchor: string } | null {
+			const charWidth = fontSize * 0.6; // Approximate monospace character width
+			const textWidth = text.length * charWidth;
+			const textHeight = fontSize * 0.8; // Height slightly less than font size
+			
+			// Try positions: right, left, top, bottom
+			const positions = [
+				{ x: x + 6, y: y + 2, anchor: 'start' },      // Right of marker
+				{ x: x - 6, y: y + 2, anchor: 'end' },        // Left of marker
+				{ x: x, y: y - 8, anchor: 'middle' },         // Above marker
+				{ x: x, y: y + 12, anchor: 'middle' }         // Below marker
+			];
+			
+			for (const pos of positions) {
+				// Calculate bounding box based on text anchor
+				let checkX = pos.x;
+				if (pos.anchor === 'start') {
+					checkX = pos.x;
+				} else if (pos.anchor === 'end') {
+					checkX = pos.x - textWidth;
+				} else {
+					checkX = pos.x - textWidth / 2;
+				}
+				
+				// Check if this position would cause overlap
+				if (!wouldOverlap(checkX, pos.y - textHeight, textWidth, textHeight)) {
+					// Store the placed label for future collision checks
+					placedLabels.push({ 
+						x: checkX, 
+						y: pos.y - textHeight, 
+						width: textWidth, 
+						height: textHeight 
+					});
+					return pos;
+				}
+			}
+			return null; // All positions would overlap, skip this label
+		}
 
 		// Setup zoom - disable scroll wheel, allow touch pinch and buttons
 		zoom = d3
@@ -452,64 +525,7 @@
 				}
 			});
 
-			// Draw hotspots with smart label placement
-			const placedLabels: Array<{ x: number; y: number; width: number; height: number }> = [];
-			
-			/**
-			 * Check if a new label would overlap with existing ones
-			 * Uses a simple bounding box collision detection
-			 */
-			function wouldOverlap(x: number, y: number, width: number, height: number): boolean {
-				for (const label of placedLabels) {
-					if (
-						x < label.x + label.width + 2 &&
-						x + width + 2 > label.x &&
-						y < label.y + label.height + 2 &&
-						y + height + 2 > label.y
-					) {
-						return true;
-					}
-				}
-				return false;
-			}
-			
-			/**
-			 * Try different positions for a label to find non-overlapping placement
-			 * Positions tried: right, left, top, bottom
-			 */
-			function findLabelPosition(
-				x: number, 
-				y: number, 
-				text: string, 
-				fontSize: number
-			): { x: number; y: number; anchor: string } | null {
-				const charWidth = fontSize * 0.6; // Approximate width per character
-				const textWidth = text.length * charWidth;
-				const textHeight = fontSize;
-				
-				// Try positions: right, left, top, bottom
-				const positions = [
-					{ x: x + 6, y: y + 2, anchor: 'start' },      // Right
-					{ x: x - 6, y: y + 2, anchor: 'end' },        // Left
-					{ x: x, y: y - 8, anchor: 'middle' },         // Top
-					{ x: x, y: y + 12, anchor: 'middle' }         // Bottom
-				];
-				
-				for (const pos of positions) {
-					// Adjust x for text anchor
-					let checkX = pos.x;
-					if (pos.anchor === 'start') checkX = pos.x;
-					else if (pos.anchor === 'end') checkX = pos.x - textWidth;
-					else checkX = pos.x - textWidth / 2;
-					
-					if (!wouldOverlap(checkX, pos.y - textHeight, textWidth, textHeight)) {
-						placedLabels.push({ x: checkX, y: pos.y - textHeight, width: textWidth, height: textHeight });
-						return pos;
-					}
-				}
-				return null; // All positions would overlap
-			}
-			
+				// Draw hotspots with smart label placement
 			HOTSPOTS.forEach((h) => {
 				const [x, y] = projection([h.lon, h.lat]) || [0, 0];
 				if (x && y) {
