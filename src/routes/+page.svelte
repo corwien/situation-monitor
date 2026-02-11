@@ -21,7 +21,8 @@
 		SituationPanel,
 		WorldLeadersPanel,
 		PrinterPanel,
-		FedPanel
+		FedPanel,
+		FearGreedPanel
 	} from '$lib/components/panels';
 	import {
 		news,
@@ -31,7 +32,8 @@
 		refresh,
 		allNewsItems,
 		fedIndicators,
-		fedNews
+		fedNews,
+		fearGreed
 	} from '$lib/stores';
 	import {
 		fetchAllNews,
@@ -42,7 +44,8 @@
 		fetchLayoffs,
 		fetchWorldLeaders,
 		fetchFedIndicators,
-		fetchFedNews
+		fetchFedNews,
+		fetchFearGreedIndex
 	} from '$lib/api';
 	import type { Prediction, WhaleTransaction, Contract, Layoff } from '$lib/api';
 	import type { CustomMonitor, WorldLeader } from '$lib/types';
@@ -134,6 +137,20 @@
 		}
 	}
 
+	async function loadFearGreedData() {
+		if (!isPanelVisible('feargreed')) return;
+		fearGreed.setLoading(true);
+		try {
+			const data = await fetchFearGreedIndex();
+			if (data) {
+				fearGreed.setData(data);
+			}
+		} catch (error) {
+			console.error('Failed to load Fear & Greed data:', error);
+			fearGreed.setError(String(error));
+		}
+	}
+
 	// Refresh handlers
 	async function handleRefresh() {
 		refresh.startRefresh();
@@ -200,7 +217,8 @@
 					loadMarkets(),
 					loadMiscData(),
 					loadWorldLeaders(),
-					loadFedData()
+					loadFedData(),
+					loadFearGreedData()
 				]);
 				refresh.endRefresh();
 			} catch (error) {
@@ -286,6 +304,12 @@
 			{#if isPanelVisible('crypto')}
 				<div class="panel-slot">
 					<CryptoPanel />
+				</div>
+			{/if}
+
+			{#if isPanelVisible('feargreed')}
+				<div class="panel-slot">
+					<FearGreedPanel />
 				</div>
 			{/if}
 

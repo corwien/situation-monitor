@@ -77,3 +77,13 @@ export {
 	type FedIndicatorsState,
 	type FedNewsState
 } from './fed';
+
+// Fear & Greed store
+export {
+	fearGreed,
+	fearGreedValue,
+	fearGreedClassification,
+	isFearGreedLoading,
+	fearGreedLastUpdated,
+	type FearGreedState
+} from './feargreed';
