@@ -6,6 +6,10 @@ export interface Hotspot {
 	lon: number;
 	level: 'critical' | 'high' | 'elevated' | 'low';
 	desc: string;
+	/** Whether this city is a capital - shown with star marker */
+	isCapital?: boolean;
+	/** Whether to show label on map - only major cities get labels */
+	showLabel?: boolean;
 }
 
 export interface ConflictZone {
@@ -66,118 +70,154 @@ export const SANCTIONED_COUNTRY_IDS = [
 	729 // Sudan
 ];
 
+/**
+ * Global hotspots - major cities and strategic locations
+ * 
+ * Display rules:
+ * - showLabel=true: City name displayed on map (major capitals and important cities)
+ * - isCapital=true: Marked with star symbol instead of dot
+ * - All hotspots show tooltip on hover regardless of label visibility
+ */
 export const HOTSPOTS: Hotspot[] = [
+	// Major Capitals - Always show label
 	{
 		name: 'DC',
 		lat: 38.9,
 		lon: -77.0,
 		level: 'low',
-		desc: 'Washington DC — US political center, White House, Pentagon, Capitol'
+		desc: 'Washington DC — US political center, White House, Pentagon, Capitol',
+		isCapital: true,
+		showLabel: true
 	},
 	{
 		name: 'Moscow',
 		lat: 55.75,
 		lon: 37.6,
 		level: 'elevated',
-		desc: 'Moscow — Kremlin, Russian military command, sanctions hub'
+		desc: 'Moscow — Kremlin, Russian military command, sanctions hub',
+		isCapital: true,
+		showLabel: true
 	},
 	{
 		name: 'Beijing',
 		lat: 39.9,
 		lon: 116.4,
 		level: 'elevated',
-		desc: 'Beijing — CCP headquarters, US-China tensions, tech rivalry'
+		desc: 'Beijing — CCP headquarters, US-China tensions, tech rivalry',
+		isCapital: true,
+		showLabel: true
 	},
 	{
 		name: 'Kyiv',
 		lat: 50.45,
 		lon: 30.5,
 		level: 'high',
-		desc: 'Kyiv — Active conflict zone, Russian invasion ongoing'
-	},
-	{
-		name: 'Taipei',
-		lat: 25.03,
-		lon: 121.5,
-		level: 'elevated',
-		desc: 'Taipei — Taiwan Strait tensions, TSMC, China threat'
-	},
-	{
-		name: 'Tehran',
-		lat: 35.7,
-		lon: 51.4,
-		level: 'critical',
-		desc: 'Tehran — ACTIVE UPRISING: 200+ cities, 26 provinces. Revolution protests, regime instability, nuclear program'
-	},
-	{
-		name: 'Tel Aviv',
-		lat: 32.07,
-		lon: 34.78,
-		level: 'high',
-		desc: 'Tel Aviv — Israel-Gaza conflict, active military operations'
+		desc: 'Kyiv — Active conflict zone, Russian invasion ongoing',
+		isCapital: true,
+		showLabel: true
 	},
 	{
 		name: 'London',
 		lat: 51.5,
 		lon: -0.12,
 		level: 'low',
-		desc: 'London — Financial center, Five Eyes, NATO ally'
-	},
-	{
-		name: 'Brussels',
-		lat: 50.85,
-		lon: 4.35,
-		level: 'low',
-		desc: 'Brussels — EU/NATO headquarters, European policy'
-	},
-	{
-		name: 'Pyongyang',
-		lat: 39.03,
-		lon: 125.75,
-		level: 'elevated',
-		desc: 'Pyongyang — North Korea nuclear threat, missile tests'
-	},
-	{
-		name: 'Riyadh',
-		lat: 24.7,
-		lon: 46.7,
-		level: 'elevated',
-		desc: 'Riyadh — Saudi oil, OPEC+, Yemen conflict, regional power'
-	},
-	{
-		name: 'Delhi',
-		lat: 28.6,
-		lon: 77.2,
-		level: 'low',
-		desc: 'Delhi — India rising power, China border tensions'
-	},
-	{
-		name: 'Singapore',
-		lat: 1.35,
-		lon: 103.82,
-		level: 'low',
-		desc: 'Singapore — Shipping chokepoint, Asian finance hub'
+		desc: 'London — Financial center, Five Eyes, NATO ally',
+		isCapital: true,
+		showLabel: true
 	},
 	{
 		name: 'Tokyo',
 		lat: 35.68,
 		lon: 139.76,
 		level: 'low',
-		desc: 'Tokyo — US ally, regional security, economic power'
+		desc: 'Tokyo — US ally, regional security, economic power',
+		isCapital: true,
+		showLabel: true
+	},
+	{
+		name: 'Delhi',
+		lat: 28.6,
+		lon: 77.2,
+		level: 'low',
+		desc: 'Delhi — India rising power, China border tensions',
+		isCapital: true,
+		showLabel: true
+	},
+	{
+		name: 'Tehran',
+		lat: 35.7,
+		lon: 51.4,
+		level: 'critical',
+		desc: 'Tehran — ACTIVE UPRISING: 200+ cities, 26 provinces. Revolution protests, regime instability, nuclear program',
+		isCapital: true,
+		showLabel: true
+	},
+	{
+		name: 'Riyadh',
+		lat: 24.7,
+		lon: 46.7,
+		level: 'elevated',
+		desc: 'Riyadh — Saudi oil, OPEC+, Yemen conflict, regional power',
+		isCapital: true,
+		showLabel: true
+	},
+	// Important Non-Capitals - Show label
+	{
+		name: 'Taipei',
+		lat: 25.03,
+		lon: 121.5,
+		level: 'elevated',
+		desc: 'Taipei — Taiwan Strait tensions, TSMC, China threat',
+		showLabel: true
+	},
+	{
+		name: 'Tel Aviv',
+		lat: 32.07,
+		lon: 34.78,
+		level: 'high',
+		desc: 'Tel Aviv — Israel-Gaza conflict, active military operations',
+		showLabel: true
 	},
 	{
 		name: 'Caracas',
 		lat: 10.5,
 		lon: -66.9,
 		level: 'high',
-		desc: 'Caracas — Venezuela crisis, Maduro regime, US sanctions, humanitarian emergency'
+		desc: 'Caracas — Venezuela crisis, Maduro regime, US sanctions, humanitarian emergency',
+		showLabel: true
+	},
+	{
+		name: 'Singapore',
+		lat: 1.35,
+		lon: 103.82,
+		level: 'low',
+		desc: 'Singapore — Shipping chokepoint, Asian finance hub',
+		showLabel: true
+	},
+	// Smaller Capitals - Star marker, no label
+	{
+		name: 'Brussels',
+		lat: 50.85,
+		lon: 4.35,
+		level: 'low',
+		desc: 'Brussels — EU/NATO headquarters, European policy',
+		isCapital: true
+	},
+	{
+		name: 'Pyongyang',
+		lat: 39.03,
+		lon: 125.75,
+		level: 'elevated',
+		desc: 'Pyongyang — North Korea nuclear threat, missile tests',
+		isCapital: true
 	},
 	{
 		name: 'Nuuk',
 		lat: 64.18,
 		lon: -51.72,
 		level: 'elevated',
-		desc: 'Nuuk — Greenland, US acquisition interest, Arctic strategy, Denmark tensions'
+		desc: 'Nuuk — Greenland, US acquisition interest, Arctic strategy, Denmark tensions',
+		isCapital: true
 	}
 ];
 

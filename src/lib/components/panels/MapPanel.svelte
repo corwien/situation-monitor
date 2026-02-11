@@ -209,6 +209,24 @@
 		}
 	}
 
+	/**
+	 * Create SVG path for a 5-pointed star
+	 * Used for capital city markers
+	 */
+	function createStarPath(cx: number, cy: number, outerRadius: number): string {
+		const innerRadius = outerRadius * 0.4;
+		let path = '';
+		for (let i = 0; i < 10; i++) {
+			const angle = (Math.PI / 5) * i - Math.PI / 2; // Start from top
+			const radius = i % 2 === 0 ? outerRadius : innerRadius;
+			const x = cx + Math.cos(angle) * radius;
+			const y = cy + Math.sin(angle) * radius;
+			path += (i === 0 ? 'M' : 'L') + `${x},${y}`;
+		}
+		path += 'Z';
+		return path;
+	}
+
 	// Initialize map
 	async function initMap(): Promise<void> {
 		const d3 = await import('d3');
@@ -222,79 +240,6 @@
 		svg.attr('viewBox', `0 0 ${WIDTH} ${HEIGHT}`);
 
 		mapGroup = svg.append('g').attr('id', 'mapGroup');
-		
-		// ============================================================================
-		// LABEL PLACEMENT MANAGEMENT
-		// Track placed labels to prevent overlapping
-		// ============================================================================
-		const placedLabels: Array<{ x: number; y: number; width: number; height: number }> = [];
-		
-		/**
-		 * Check if a new label would overlap with existing ones
-		 * Uses simple bounding box collision detection with padding
-		 */
-		function wouldOverlap(x: number, y: number, width: number, height: number, padding = 2): boolean {
-			for (const label of placedLabels) {
-				if (
-					x < label.x + label.width + padding &&
-					x + width + padding > label.x &&
-					y < label.y + label.height + padding &&
-					y + height + padding > label.y
-				) {
-					return true;
-				}
-			}
-			return false;
-		}
-		
-		/**
-		 * Try different positions for a label to find non-overlapping placement
-		 * Positions tried in order: right, left, top, bottom
-		 * Returns position info or null if all positions overlap
-		 */
-		function findLabelPosition(
-			x: number, 
-			y: number, 
-			text: string, 
-			fontSize: number
-		): { x: number; y: number; anchor: string } | null {
-			const charWidth = fontSize * 0.6; // Approximate monospace character width
-			const textWidth = text.length * charWidth;
-			const textHeight = fontSize * 0.8; // Height slightly less than font size
-			
-			// Try positions: right, left, top, bottom
-			const positions = [
-				{ x: x + 6, y: y + 2, anchor: 'start' },      // Right of marker
-				{ x: x - 6, y: y + 2, anchor: 'end' },        // Left of marker
-				{ x: x, y: y - 8, anchor: 'middle' },         // Above marker
-				{ x: x, y: y + 12, anchor: 'middle' }         // Below marker
-			];
-			
-			for (const pos of positions) {
-				// Calculate bounding box based on text anchor
-				let checkX = pos.x;
-				if (pos.anchor === 'start') {
-					checkX = pos.x;
-				} else if (pos.anchor === 'end') {
-					checkX = pos.x - textWidth;
-				} else {
-					checkX = pos.x - textWidth / 2;
-				}
-				
-				// Check if this position would cause overlap
-				if (!wouldOverlap(checkX, pos.y - textHeight, textWidth, textHeight)) {
-					// Store the placed label for future collision checks
-					placedLabels.push({ 
-						x: checkX, 
-						y: pos.y - textHeight, 
-						width: textWidth, 
-						height: textHeight 
-					});
-					return pos;
-				}
-			}
-			return null; // All positions would overlap, skip this label
-		}
 
 		// Setup zoom - disable scroll wheel, allow touch pinch and buttons
 		zoom = d3
@@ -406,7 +351,7 @@
 					.attr('stroke-opacity', 0.4);
 			});
 
-			// Draw chokepoints with smart labeling
+				// Draw chokepoints - only show tooltip, no labels to reduce clutter
 			CHOKEPOINTS.forEach((cp) => {
 				const [x, y] = projection([cp.lon, cp.lat]) || [0, 0];
 				if (x && y) {
@@ -420,22 +365,7 @@
 						.attr('opacity', 0.8)
 						.attr('transform', `rotate(45,${x},${y})`);
 					
-					// Smart label placement with smaller font
-					const fontSize = 5; // Reduced from 7px
-					const pos = findLabelPosition(x, y, cp.name, fontSize);
-					
-					if (pos) {
-						mapGroup
-							.append('text')
-							.attr('x', pos.x)
-							.attr('y', pos.y)
-							.attr('fill', '#00aaff')
-							.attr('font-size', `${fontSize}px`)
-							.attr('font-family', 'monospace')
-							.attr('text-anchor', pos.anchor)
-							.text(cp.name);
-					}
-					
+					// Hit area for tooltip
 					mapGroup
 						.append('circle')
 						.attr('cx', x)
@@ -525,46 +455,66 @@
 				}
 			});
 
-				// Draw hotspots with smart label placement
+				// Draw hotspots
 			HOTSPOTS.forEach((h) => {
 				const [x, y] = projection([h.lon, h.lat]) || [0, 0];
 				if (x && y) {
 					const color = THREAT_COLORS[h.level];
-					// Pulsing circle
-					mapGroup
-						.append('circle')
-						.attr('cx', x)
-						.attr('cy', y)
-						.attr('r', 5)
-						.attr('fill', color)
-						.attr('fill-opacity', 0.3)
-						.attr('class', 'pulse');
-					// Inner dot
-					mapGroup.append('circle').attr('cx', x).attr('cy', y).attr('r', 2.5).attr('fill', color);
 					
-					// Smart label placement with collision detection
-					const fontSize = 6; // Reduced from 8px
-					const pos = findLabelPosition(x, y, h.name, fontSize);
+					// Capitals use star marker, others use circle
+					if (h.isCapital) {
+						// Draw star for capitals (5-pointed star)
+						const starSize = 5;
+						const starPath = createStarPath(x, y, starSize);
+						mapGroup
+							.append('path')
+							.attr('d', starPath)
+							.attr('fill', color)
+							.attr('class', 'capital-star');
+					} else {
+						// Pulsing circle for non-capitals
+						mapGroup
+							.append('circle')
+							.attr('cx', x)
+							.attr('cy', y)
+							.attr('r', 5)
+							.attr('fill', color)
+							.attr('fill-opacity', 0.3)
+							.attr('class', 'pulse');
+						// Inner dot
+						mapGroup
+							.append('circle')
+							.attr('cx', x)
+							.attr('cy', y)
+							.attr('r', 2.5)
+							.attr('fill', color);
+					}
 					
-					if (pos) {
+					// Only show label for major cities (showLabel=true)
+					// Use fixed offset to the right (x + 8, y + 3) for consistency
+					if (h.showLabel) {
+						const labelX = x + 8;
+						const labelY = y + 3;
+						const fontSize = 7;
+						
 						mapGroup
 							.append('text')
-							.attr('x', pos.x)
-							.attr('y', pos.y)
+							.attr('x', labelX)
+							.attr('y', labelY)
 							.attr('fill', color)
 							.attr('font-size', `${fontSize}px`)
 							.attr('font-family', 'monospace')
-							.attr('text-anchor', pos.anchor)
+							.attr('text-anchor', 'start')
 							.attr('class', 'hotspot-label')
 							.text(h.name);
 					}
 					
-					// Hit area (invisible but larger for easier hovering)
+					// Hit area for tooltip (invisible but larger for easier hovering)
 					mapGroup
 						.append('circle')
 						.attr('cx', x)
 						.attr('cy', y)
-						.attr('r', 10)
+						.attr('r', 12)
 						.attr('fill', 'transparent')
 						.attr('class', 'hotspot-hit')
 						.on('mouseenter', (event: MouseEvent) =>
@@ -582,66 +532,12 @@
 		}
 	}
 
-	// Draw custom monitor locations with smart label placement
+	// Draw custom monitor locations
 	function drawMonitors(): void {
 		if (!mapGroup || !projection) return;
 
 		// Remove existing monitor markers
 		mapGroup.selectAll('.monitor-marker').remove();
-		
-		// Reset label tracking for monitors
-		const monitorLabels: Array<{ x: number; y: number; width: number; height: number }> = [];
-		
-		/**
-		 * Check collision for monitor labels
-		 */
-		function wouldMonitorOverlap(x: number, y: number, width: number, height: number): boolean {
-			for (const label of monitorLabels) {
-				if (
-					x < label.x + label.width + 2 &&
-					x + width + 2 > label.x &&
-					y < label.y + label.height + 2 &&
-					y + height + 2 > label.y
-				) {
-					return true;
-				}
-			}
-			return false;
-		}
-		
-		/**
-		 * Find best position for monitor label
-		 */
-		function findMonitorLabelPosition(
-			x: number, 
-			y: number, 
-			text: string, 
-			fontSize: number
-		): { x: number; y: number; anchor: string } | null {
-			const charWidth = fontSize * 0.6;
-			const textWidth = text.length * charWidth;
-			const textHeight = fontSize;
-			
-			const positions = [
-				{ x: x + 6, y: y + 2, anchor: 'start' },
-				{ x: x - 6, y: y + 2, anchor: 'end' },
-				{ x: x, y: y - 8, anchor: 'middle' },
-				{ x: x, y: y + 12, anchor: 'middle' }
-			];
-			
-			for (const pos of positions) {
-				let checkX = pos.x;
-				if (pos.anchor === 'start') checkX = pos.x;
-				else if (pos.anchor === 'end') checkX = pos.x - textWidth;
-				else checkX = pos.x - textWidth / 2;
-				
-				if (!wouldMonitorOverlap(checkX, pos.y - textHeight, textWidth, textHeight)) {
-					monitorLabels.push({ x: checkX, y: pos.y - textHeight, width: textWidth, height: textHeight });
-					return pos;
-				}
-			}
-			return null;
-		}
 
 		monitors
 			.filter((m) => m.enabled && m.location)
@@ -662,22 +558,17 @@
 						.attr('stroke', color)
 						.attr('stroke-width', 1.5);
 					
-					// Smart label placement with smaller font
-					const fontSize = 6; // Reduced from 8px
-					const pos = findMonitorLabelPosition(x, y, m.name, fontSize);
-					
-					if (pos) {
-						mapGroup
-							.append('text')
-							.attr('class', 'monitor-marker')
-							.attr('x', pos.x)
-							.attr('y', pos.y)
-							.attr('fill', color)
-							.attr('font-size', `${fontSize}px`)
-							.attr('font-family', 'monospace')
-							.attr('text-anchor', pos.anchor)
-							.text(m.name);
-					}
+					// Fixed position label to the right
+					mapGroup
+						.append('text')
+						.attr('class', 'monitor-marker')
+						.attr('x', x + 6)
+						.attr('y', y + 2)
+						.attr('fill', color)
+						.attr('font-size', '6px')
+						.attr('font-family', 'monospace')
+						.attr('text-anchor', 'start')
+						.text(m.name);
 					
 					// Hit area for tooltip
 					mapGroup
@@ -882,6 +773,11 @@
 
 	:global(.hotspot-hit) {
 		cursor: pointer;
+	}
+	
+	/* Capital star styling */
+	:global(.capital-star) {
+		filter: drop-shadow(0 0 2px currentColor);
 	}
 	
 	/* Small text optimization for map labels */
