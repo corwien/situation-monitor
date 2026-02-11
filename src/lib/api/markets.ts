@@ -33,26 +33,50 @@ interface FinnhubQuote {
  * Check if Finnhub API key is configured
  */
 function hasFinnhubApiKey(): boolean {
-	return Boolean(FINNHUB_API_KEY && FINNHUB_API_KEY.length > 0);
+	return Boolean(FINNHUB_API_KEY && FINNHUB_API_KEY.length > 0 && !FINNHUB_API_KEY.includes('your_api_key'));
 }
 
 /**
- * Create an empty market item (used for error/missing data states)
+ * Demo/Mock data for when API is not available
+ * Provides realistic market data for demonstration purposes
  */
-function createEmptyMarketItem<T extends 'index' | 'commodity'>(
-	symbol: string,
-	name: string,
-	type: T
-): MarketItem {
-	return { symbol, name, price: NaN, change: NaN, changePercent: NaN, type };
-}
-
-/**
- * Create an empty sector performance item
- */
-function createEmptySectorItem(symbol: string, name: string): SectorPerformance {
-	return { symbol, name, price: NaN, change: NaN, changePercent: NaN };
-}
+const DEMO_DATA = {
+	// Index ETFs approximations (based on typical values)
+	indices: {
+		'DIA': { c: 43850, d: 125.5, dp: 0.29 },    // Dow ~ DIA * 0.1
+		'SPY': { c: 605.50, d: 1.25, dp: 0.21 },    // S&P 500
+		'QQQ': { c: 528.75, d: 2.15, dp: 0.41 },    // NASDAQ-100
+		'IWM': { c: 223.40, d: -0.85, dp: -0.38 }   // Russell 2000
+	},
+	// Sector ETFs
+	sectors: {
+		'XLK': { c: 247.50, d: 1.85, dp: 0.75 },    // Technology
+		'XLF': { c: 50.25, d: 0.15, dp: 0.30 },     // Financials
+		'XLE': { c: 96.80, d: -0.45, dp: -0.46 },   // Energy
+		'XLI': { c: 138.20, d: 0.42, dp: 0.30 },    // Industrials
+		'XLP': { c: 81.50, d: 0.08, dp: 0.10 },     // Consumer Staples
+		'XLRE': { c: 43.85, d: -0.12, dp: -0.27 },  // Real Estate
+		'XLU': { c: 77.40, d: 0.25, dp: 0.32 },     // Utilities
+		'XLB': { c: 92.15, d: 0.35, dp: 0.38 },     // Materials
+		'XLC': { c: 88.60, d: 0.55, dp: 0.62 },     // Communication
+		'XLV': { c: 149.30, d: -0.25, dp: -0.17 }   // Health Care
+	},
+	// Commodity proxies
+	commodities: {
+		'VIXY': { c: 12.85, d: -0.35, dp: -2.65 },  // VIX proxy
+		'GLD': { c: 268.50, d: 2.15, dp: 0.81 },    // Gold
+		'USO': { c: 78.25, d: -0.45, dp: -0.57 },   // Oil
+		'UNG': { c: 14.35, d: 0.08, dp: 0.56 },     // Natural Gas
+		'SLV': { c: 29.80, d: 0.25, dp: 0.84 },     // Silver
+		'CPER': { c: 28.45, d: 0.12, dp: 0.42 }     // Copper
+	},
+	// Crypto (approximate values)
+	crypto: {
+		'bitcoin': { usd: 98500, usd_24h_change: 2.35 },
+		'ethereum': { usd: 3780, usd_24h_change: 1.85 },
+		'solana': { usd: 218, usd_24h_change: 4.20 }
+	}
+};
 
 // Map index symbols to ETF proxies (free tier doesn't support direct indices)
 const INDEX_ETF_MAP: Record<string, string> = {
@@ -90,8 +114,22 @@ async function fetchFinnhubQuote(symbol: string): Promise<FinnhubQuote | null> {
 
 /**
  * Fetch crypto prices from CoinGecko via proxy
+ * Falls back to demo data if API fails
  */
 export async function fetchCryptoPrices(): Promise<CryptoItem[]> {
+	const createDemoCrypto = () =>
+		CRYPTO.map((c) => {
+			const demo = DEMO_DATA.crypto[c.id as keyof typeof DEMO_DATA.crypto];
+			return {
+				id: c.id,
+				symbol: c.symbol,
+				name: c.name,
+				current_price: demo?.usd ?? 0,
+				price_change_24h: demo?.usd_24h_change ?? 0,
+				price_change_percentage_24h: demo?.usd_24h_change ?? 0
+			};
+		});
+
 	try {
 		const ids = CRYPTO.map((c) => c.id).join(',');
 		const coinGeckoUrl = `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`;
@@ -105,6 +143,13 @@ export async function fetchCryptoPrices(): Promise<CryptoItem[]> {
 
 		const data: CoinGeckoPricesResponse = await response.json();
 
+		// Check if we got valid data
+		const hasValidData = Object.values(data).some((priceData) => priceData?.usd > 0);
+		if (!hasValidData) {
+			logger.warn('Markets API', 'No valid crypto data from API, using demo data');
+			return createDemoCrypto();
+		}
+
 		return CRYPTO.map((crypto) => {
 			const priceData = data[crypto.id];
 			return {
@@ -117,28 +162,33 @@ export async function fetchCryptoPrices(): Promise<CryptoItem[]> {
 			};
 		});
 	} catch (error) {
-		logger.error('Markets API', 'Error fetching crypto:', error);
-		return CRYPTO.map((c) => ({
-			id: c.id,
-			symbol: c.symbol,
-			name: c.name,
-			current_price: 0,
-			price_change_24h: 0,
-			price_change_percentage_24h: 0
-		}));
+		logger.error('Markets API', 'Error fetching crypto, using demo data:', error);
+		return createDemoCrypto();
 	}
 }
 
 /**
  * Fetch market indices from Finnhub
+ * Falls back to demo data if API key is not available
  */
 export async function fetchIndices(): Promise<MarketItem[]> {
-	const createEmptyIndices = () =>
-		INDICES.map((i) => createEmptyMarketItem(i.symbol, i.name, 'index'));
+	const createDemoIndices = () =>
+		INDICES.map((i) => {
+			const etfSymbol = INDEX_ETF_MAP[i.symbol] || i.symbol;
+			const demo = DEMO_DATA.indices[etfSymbol as keyof typeof DEMO_DATA.indices];
+			return {
+				symbol: i.symbol,
+				name: i.name,
+				price: demo?.c ?? NaN,
+				change: demo?.d ?? NaN,
+				changePercent: demo?.dp ?? NaN,
+				type: 'index' as const
+			};
+		});
 
 	if (!hasFinnhubApiKey()) {
-		logger.warn('Markets API', 'Finnhub API key not configured. Add VITE_FINNHUB_API_KEY to .env');
-		return createEmptyIndices();
+		logger.log('Markets API', 'Using demo data for indices (API key not configured)');
+		return createDemoIndices();
 	}
 
 	try {
@@ -152,6 +202,13 @@ export async function fetchIndices(): Promise<MarketItem[]> {
 			})
 		);
 
+		// Check if we got valid data, otherwise use demo
+		const hasValidData = quotes.some(({ quote }) => quote && quote.c > 0);
+		if (!hasValidData) {
+			logger.warn('Markets API', 'No valid data from API, using demo data for indices');
+			return createDemoIndices();
+		}
+
 		return quotes.map(({ index, quote }) => ({
 			symbol: index.symbol,
 			name: index.name,
@@ -161,21 +218,31 @@ export async function fetchIndices(): Promise<MarketItem[]> {
 			type: 'index' as const
 		}));
 	} catch (error) {
-		logger.error('Markets API', 'Error fetching indices:', error);
-		return createEmptyIndices();
+		logger.error('Markets API', 'Error fetching indices, using demo data:', error);
+		return createDemoIndices();
 	}
 }
 
 /**
  * Fetch sector performance from Finnhub (using sector ETFs)
+ * Falls back to demo data if API key is not available
  */
 export async function fetchSectorPerformance(): Promise<SectorPerformance[]> {
-	const createEmptySectors = () =>
-		SECTORS.map((s) => createEmptySectorItem(s.symbol, s.name));
+	const createDemoSectors = () =>
+		SECTORS.map((s) => {
+			const demo = DEMO_DATA.sectors[s.symbol as keyof typeof DEMO_DATA.sectors];
+			return {
+				symbol: s.symbol,
+				name: s.name,
+				price: demo?.c ?? NaN,
+				change: demo?.d ?? NaN,
+				changePercent: demo?.dp ?? NaN
+			};
+		});
 
 	if (!hasFinnhubApiKey()) {
-		logger.warn('Markets API', 'Finnhub API key not configured');
-		return createEmptySectors();
+		logger.log('Markets API', 'Using demo data for sectors (API key not configured)');
+		return createDemoSectors();
 	}
 
 	try {
@@ -188,6 +255,13 @@ export async function fetchSectorPerformance(): Promise<SectorPerformance[]> {
 			})
 		);
 
+		// Check if we got valid data, otherwise use demo
+		const hasValidData = quotes.some(({ quote }) => quote && quote.c > 0);
+		if (!hasValidData) {
+			logger.warn('Markets API', 'No valid data from API, using demo data for sectors');
+			return createDemoSectors();
+		}
+
 		return quotes.map(({ sector, quote }) => ({
 			symbol: sector.symbol,
 			name: sector.name,
@@ -196,8 +270,8 @@ export async function fetchSectorPerformance(): Promise<SectorPerformance[]> {
 			changePercent: quote?.dp ?? NaN
 		}));
 	} catch (error) {
-		logger.error('Markets API', 'Error fetching sectors:', error);
-		return createEmptySectors();
+		logger.error('Markets API', 'Error fetching sectors, using demo data:', error);
+		return createDemoSectors();
 	}
 }
 
@@ -213,14 +287,26 @@ const COMMODITY_SYMBOL_MAP: Record<string, string> = {
 
 /**
  * Fetch commodities from Finnhub
+ * Falls back to demo data if API key is not available
  */
 export async function fetchCommodities(): Promise<MarketItem[]> {
-	const createEmptyCommodities = () =>
-		COMMODITIES.map((c) => createEmptyMarketItem(c.symbol, c.name, 'commodity'));
+	const createDemoCommodities = () =>
+		COMMODITIES.map((c) => {
+			const finnhubSymbol = COMMODITY_SYMBOL_MAP[c.symbol] || c.symbol;
+			const demo = DEMO_DATA.commodities[finnhubSymbol as keyof typeof DEMO_DATA.commodities];
+			return {
+				symbol: c.symbol,
+				name: c.name,
+				price: demo?.c ?? NaN,
+				change: demo?.d ?? NaN,
+				changePercent: demo?.dp ?? NaN,
+				type: 'commodity' as const
+			};
+		});
 
 	if (!hasFinnhubApiKey()) {
-		logger.warn('Markets API', 'Finnhub API key not configured');
-		return createEmptyCommodities();
+		logger.log('Markets API', 'Using demo data for commodities (API key not configured)');
+		return createDemoCommodities();
 	}
 
 	try {
@@ -234,6 +320,13 @@ export async function fetchCommodities(): Promise<MarketItem[]> {
 			})
 		);
 
+		// Check if we got valid data, otherwise use demo
+		const hasValidData = quotes.some(({ quote }) => quote && quote.c > 0);
+		if (!hasValidData) {
+			logger.warn('Markets API', 'No valid data from API, using demo data for commodities');
+			return createDemoCommodities();
+		}
+
 		return quotes.map(({ commodity, quote }) => ({
 			symbol: commodity.symbol,
 			name: commodity.name,
@@ -243,8 +336,8 @@ export async function fetchCommodities(): Promise<MarketItem[]> {
 			type: 'commodity' as const
 		}));
 	} catch (error) {
-		logger.error('Markets API', 'Error fetching commodities:', error);
-		return createEmptyCommodities();
+		logger.error('Markets API', 'Error fetching commodities, using demo data:', error);
+		return createDemoCommodities();
 	}
 }
 
