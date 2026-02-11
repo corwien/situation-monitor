@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Panel } from '$lib/components/common';
+	import { t } from '$lib/stores';
 
 	interface Prediction {
 		id: string;
@@ -28,9 +29,9 @@
 	}
 </script>
 
-<Panel id="polymarket" title="Polymarket" {count} {loading} {error}>
+<Panel id="polymarket" title={$t('panels.polymarket.name')} {count} {loading} {error}>
 	{#if predictions.length === 0 && !loading && !error}
-		<div class="empty-state">No predictions available</div>
+		<div class="empty-state">{$t('panels.polymarket.empty')}</div>
 	{:else}
 		<div class="predictions-list">
 			{#each predictions as pred (pred.id)}
@@ -40,7 +41,7 @@
 						<div class="prediction-volume">Vol: {formatVolume(pred.volume)}</div>
 					</div>
 					<div class="prediction-odds">
-						<span class="prediction-yes">{pred.yes}%</span>
+						<span class="prediction-yes data-value">{pred.yes}%</span>
 					</div>
 				</div>
 			{/each}

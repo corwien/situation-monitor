@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Panel } from '$lib/components/common';
-	import { fearGreed, fearGreedValue, fearGreedClassification } from '$lib/stores';
+	import { fearGreed, fearGreedValue, fearGreedClassification, t, locale } from '$lib/stores';
 	import { getFearGreedLabel, getFearGreedClass } from '$lib/api';
 
 	const data = $derived($fearGreed.data);
@@ -12,20 +12,36 @@
 	// Compute status text for panel header
 	const status = $derived(value !== undefined ? `${value}/100` : '');
 
-	// Get label and CSS class
-	const label = $derived(classification ? getFearGreedLabel(classification) : '');
+	// Get label based on current locale
+	function getLocalizedLabel(classification: string): string {
+		if (!classification) return '';
+		// If Chinese locale, use the Chinese translation keys
+		if ($locale === 'zh') {
+			const key = `panels.feargreed.${classification.toLowerCase().replace(/\s+/g, '')}.zh`;
+			return $t(key as import('$lib/i18n/translations').TranslationKey);
+		}
+		// For English, use the label from API or translation
+		const label = getFearGreedLabel(classification);
+		// If label is already Chinese (from API), return classification instead
+		if (/[\u4e00-\u9fa5]/.test(label)) {
+			return classification;
+		}
+		return label;
+	}
+	
+	const label = $derived(classification ? getLocalizedLabel(classification) : '');
 	const sentimentClass = $derived(getFearGreedClass(value));
 </script>
 
-<Panel id="feargreed" title="Fear & Greed" count={status} {loading} {error}>
+<Panel id="feargreed" title={$t('panels.feargreed.name')} count={status} {loading} {error}>
 	{#if !data && !loading && !error}
-		<div class="empty-state">No data available</div>
+		<div class="empty-state">{$t('panel.empty')}</div>
 	{:else if data}
 		<div class="fear-greed-container">
 			<div class="gauge-container">
 				<div class="gauge">
 					<div class="gauge-value {sentimentClass}">{value}</div>
-					<div class="gauge-label">Index</div>
+					<div class="gauge-label">{$t('panels.feargreed.index')}</div>
 				</div>
 			</div>
 			<div class="sentiment {sentimentClass}">
@@ -33,7 +49,9 @@
 			</div>
 			<div class="classification">
 				<span class="en">{classification}</span>
-				<span class="cn">{label}</span>
+				{#if $locale === 'en' && classification}
+					<span class="local">{getFearGreedLabel(classification)}</span>
+				{/if}
 			</div>
 		</div>
 	{/if}
@@ -156,7 +174,7 @@
 		opacity: 0.7;
 	}
 
-	.classification .cn {
+	.classification .local {
 		font-weight: 500;
 	}
 

@@ -2,6 +2,9 @@
  * Stores barrel file - re-exports all stores
  */
 
+// i18n store
+export { locale, t, getTranslation, type Locale } from '$lib/i18n';
+
 // Settings store
 export {
 	settings,

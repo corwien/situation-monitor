@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { isRefreshing, lastRefresh } from '$lib/stores';
+	import { isRefreshing, lastRefresh, t } from '$lib/stores';
+	import { LanguageSwitcher } from '$lib/components/common';
 
 	interface Props {
 		onSettingsClick?: () => void;
@@ -9,20 +10,20 @@
 
 	const lastRefreshText = $derived(
 		$lastRefresh
-			? `Last updated: ${new Date($lastRefresh).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
-			: 'Never refreshed'
+			? $t('header.lastUpdated', { time: new Date($lastRefresh).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) })
+			: $t('header.neverRefreshed')
 	);
 </script>
 
 <header class="header">
 	<div class="header-left">
-		<h1 class="logo">SITUATION MONITOR</h1>
+		<h1 class="logo">{$t('header.logo')}</h1>
 	</div>
 
 	<div class="header-center">
 		<div class="refresh-status">
 			{#if $isRefreshing}
-				<span class="status-text loading">Refreshing...</span>
+				<span class="status-text loading">{$t('header.refreshing')}</span>
 			{:else}
 				<span class="status-text">{lastRefreshText}</span>
 			{/if}
@@ -30,9 +31,10 @@
 	</div>
 
 	<div class="header-right">
-		<button class="header-btn settings-btn" onclick={onSettingsClick} title="Settings">
+		<LanguageSwitcher variant="minimal" />
+		<button class="header-btn settings-btn" onclick={onSettingsClick} title={$t('header.settings')}>
 			<span class="btn-icon">⚙</span>
-			<span class="btn-label">Settings</span>
+			<span class="btn-label">{$t('header.settings')}</span>
 		</button>
 	</div>
 </header>
