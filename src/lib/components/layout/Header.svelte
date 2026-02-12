@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { isRefreshing, lastRefresh, t } from '$lib/stores';
 	import { LanguageSwitcher } from '$lib/components/common';
 
@@ -13,6 +14,32 @@
 			? $t('header.lastUpdated', { time: new Date($lastRefresh).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) })
 			: $t('header.neverRefreshed')
 	);
+
+	// Fullscreen toggle
+	let isFullscreen = $state(false);
+
+	function toggleFullscreen() {
+		if (!document.fullscreenElement) {
+			document.documentElement.requestFullscreen().then(() => {
+				isFullscreen = true;
+			}).catch(() => {
+				isFullscreen = false;
+			});
+		} else {
+			document.exitFullscreen().then(() => {
+				isFullscreen = false;
+			}).catch(() => {});
+		}
+	}
+
+	// Listen for fullscreen change
+	onMount(() => {
+		const handleFullscreenChange = () => {
+			isFullscreen = !!document.fullscreenElement;
+		};
+		document.addEventListener('fullscreenchange', handleFullscreenChange);
+		return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+	});
 </script>
 
 <header class="header">
@@ -31,6 +58,14 @@
 	</div>
 
 	<div class="header-right">
+		<button 
+			class="header-btn fullscreen-btn" 
+			onclick={toggleFullscreen} 
+			title={isFullscreen ? $t('header.exitFullscreen') : $t('header.enterFullscreen')}
+		>
+			<span class="btn-icon">{isFullscreen ? '⛶' : '⛶'}</span>
+			<span class="btn-label">{isFullscreen ? $t('header.exitFullscreen') : $t('header.enterFullscreen')}</span>
+		</button>
 		<LanguageSwitcher variant="minimal" />
 		<button class="header-btn settings-btn" onclick={onSettingsClick} title={$t('header.settings')}>
 			<span class="btn-icon">⚙</span>

@@ -1,12 +1,13 @@
 /**
  * Treasury Yield API - Fetch US Treasury yield data from FRED
+ * Uses CORS proxy to bypass browser restrictions
  * 
  * FRED (Federal Reserve Economic Data) - St. Louis Fed
  * Free tier: Unlimited requests
- * Get your key at: https://fred.stlouisfed.org/docs/api/api_key.html
  */
 
-import { FRED_API_KEY, FRED_BASE_URL, logger } from '$lib/config/api';
+import { logger } from '$lib/config/api';
+import { CACHE_CONFIG, LocalCache } from '$lib/utils/cache';
 
 export interface TreasuryYield {
 	date: string;
@@ -19,6 +20,7 @@ export interface YieldCurveData {
 	spread: number | null; // 10Y - 2Y
 	isInverted: boolean;
 	lastUpdated: string;
+	dataSource: 'api' | 'demo';
 }
 
 // Treasury series IDs in FRED
@@ -27,104 +29,118 @@ const TREASURY_SERIES = {
 	'10Y': 'DGS10' // 10-Year Treasury Constant Maturity Rate
 } as const;
 
-/**
- * Check if FRED API key is configured
- */
-function hasFredApiKey(): boolean {
-	return Boolean(FRED_API_KEY && FRED_API_KEY.length > 0 && !FRED_API_KEY.includes('your'));
-}
+// Nginx Reverse Proxy URL (bypasses CORS)
+const PROXY_BASE = '/api/fred/series/observations';
 
-/**
- * Demo data for when API is not available
- * Based on recent market conditions
- */
+// Demo data fallback
 const DEMO_YIELD_DATA: YieldCurveData = {
 	'2Y': { date: new Date().toISOString().split('T')[0], value: 4.25 },
 	'10Y': { date: new Date().toISOString().split('T')[0], value: 4.55 },
-	spread: 0.30, // 30 bps positive (normal)
+	spread: 0.30,
 	isInverted: false,
-	lastUpdated: new Date().toISOString()
+	lastUpdated: new Date().toISOString(),
+	dataSource: 'demo'
 };
 
 /**
- * Fetch latest treasury yield from FRED
+ * Check if we have API key configured
  */
-async function fetchYieldFromFred(seriesId: string): Promise<TreasuryYield | null> {
-	try {
-		// FRED API endpoint for latest observation
-		const url = `${FRED_BASE_URL}/series/observations?series_id=${seriesId}&sort_order=desc&limit=1&api_key=${FRED_API_KEY}&file_type=json`;
-		
-		const response = await fetch(url);
-		
-		if (!response.ok) {
-			throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-		}
-
-		const data = await response.json();
-		
-		if (!data.observations || data.observations.length === 0) {
-			return null;
-		}
-
-		const latest = data.observations[0];
-		const value = parseFloat(latest.value);
-		
-		if (isNaN(value)) {
-			return null;
-		}
-
-		return {
-			date: latest.date,
-			value
-		};
-	} catch (error) {
-		logger.error('Treasury API', `Error fetching ${seriesId}:`, error);
-		return null;
-	}
+function hasFredApiKey(): boolean {
+	const apiKey = import.meta.env.VITE_FRED_API_KEY;
+	return Boolean(apiKey && apiKey.length > 0 && !apiKey.includes('your'));
 }
 
 /**
- * Fetch yield curve data (2Y and 10Y Treasury)
+ * Fetch treasury yield using Nginx reverse proxy
  */
-export async function fetchYieldCurve(): Promise<YieldCurveData> {
+async function fetchYieldWithProxy(seriesId: string): Promise<TreasuryYield | null> {
 	if (!hasFredApiKey()) {
-		logger.log('Treasury API', 'Using demo yield data (FRED API key not configured)');
-		return DEMO_YIELD_DATA;
+		return null;
 	}
 
+	const apiKey = import.meta.env.VITE_FRED_API_KEY;
+	// Use Nginx reverse proxy path
+	const url = `${PROXY_BASE}?series_id=${seriesId}&sort_order=desc&limit=1&api_key=${apiKey}&file_type=json`;
+
 	try {
-		logger.log('Treasury API', 'Fetching Treasury yields from FRED');
-
-		const [yield2Y, yield10Y] = await Promise.all([
-			fetchYieldFromFred(TREASURY_SERIES['2Y']),
-			fetchYieldFromFred(TREASURY_SERIES['10Y'])
-		]);
-
-		// Check if we got valid data
-		if (!yield2Y || !yield10Y) {
-			logger.warn('Treasury API', 'No valid data from FRED, using demo data');
-			return DEMO_YIELD_DATA;
+		const response = await fetch(url, {
+			headers: {
+				'User-Agent': 'Mozilla/5.0'
+			},
+			signal: AbortSignal.timeout(15000)
+		});
+		
+		if (!response.ok) {
+			console.error(`[Treasury] Proxy returned ${response.status}`);
+			return null;
 		}
+		
+		const data = await response.json();
+		
+		if (data.observations?.[0]) {
+			const obs = data.observations[0];
+			const value = parseFloat(obs.value);
+			if (!isNaN(value)) {
+				return {
+					date: obs.date,
+					value
+				};
+			}
+		}
+	} catch (e) {
+		console.error('[Treasury] Proxy error:', e);
+	}
+	
+	return null;
+}
 
+/**
+ * Fetch yield curve data using CORS proxy
+ */
+export async function fetchYieldCurve(): Promise<YieldCurveData> {
+	// Create daily cache key
+	const today = new Date().toISOString().split('T')[0];
+	const dailyKey = `${CACHE_CONFIG.TREASURY_YIELDS.key}_${today}`;
+	
+	// Try cache first
+	const cached = LocalCache.get<YieldCurveData>(dailyKey);
+	if (cached) {
+		logger.log('Treasury API', 'Using cached data');
+		return cached;
+	}
+
+	// Try fetching with CORS proxy
+	const [yield2Y, yield10Y] = await Promise.all([
+		fetchYieldWithProxy(TREASURY_SERIES['2Y']),
+		fetchYieldWithProxy(TREASURY_SERIES['10Y'])
+	]);
+
+	// Check if we got valid data
+	if (yield2Y && yield10Y) {
 		const spread = yield10Y.value - yield2Y.value;
-		const isInverted = spread < 0;
-
-		return {
+		
+		const result: YieldCurveData = {
 			'2Y': yield2Y,
 			'10Y': yield10Y,
 			spread,
-			isInverted,
-			lastUpdated: new Date().toISOString()
+			isInverted: spread < 0,
+			lastUpdated: new Date().toISOString(),
+			dataSource: 'api'
 		};
-	} catch (error) {
-		logger.error('Treasury API', 'Error fetching yield curve, using demo data:', error);
-		return DEMO_YIELD_DATA;
+
+		// Cache for 1 hour
+		LocalCache.set(dailyKey, result, CACHE_CONFIG.TREASURY_YIELDS.ttl / 60);
+		logger.log('Treasury API', `Success: 2Y=${yield2Y.value}, 10Y=${yield10Y.value}`);
+		
+		return result;
 	}
+
+	logger.warn('Treasury API', 'Using demo data (proxy failed)');
+	return DEMO_YIELD_DATA;
 }
 
 /**
  * Fetch historical yield curve for charting
- * Returns last 90 days of 2Y and 10Y yields
  */
 export async function fetchYieldCurveHistory(): Promise<{
 	dates: string[];
@@ -132,69 +148,24 @@ export async function fetchYieldCurveHistory(): Promise<{
 	'10Y': number[];
 	spread: number[];
 }> {
-	if (!hasFredApiKey()) {
-		// Generate demo historical data
-		const dates: string[] = [];
-		const yields2Y: number[] = [];
-		const yields10Y: number[] = [];
-		const spreads: number[] = [];
+	// Generate demo data
+	const dates: string[] = [];
+	const yields2Y: number[] = [];
+	const yields10Y: number[] = [];
+	const spreads: number[] = [];
+	
+	for (let i = 90; i >= 0; i--) {
+		const date = new Date();
+		date.setDate(date.getDate() - i);
+		dates.push(date.toISOString().split('T')[0]);
 		
-		for (let i = 90; i >= 0; i--) {
-			const date = new Date();
-			date.setDate(date.getDate() - i);
-			dates.push(date.toISOString().split('T')[0]);
-			
-			// Simulate some variation
-			const base2Y = 4.25 + Math.sin(i / 10) * 0.3;
-			const base10Y = 4.55 + Math.sin(i / 10) * 0.25;
-			
-			yields2Y.push(parseFloat(base2Y.toFixed(2)));
-			yields10Y.push(parseFloat(base10Y.toFixed(2)));
-			spreads.push(parseFloat((base10Y - base2Y).toFixed(2)));
-		}
+		const base2Y = 4.25 + Math.sin(i / 10) * 0.3;
+		const base10Y = 4.55 + Math.sin(i / 10) * 0.25;
 		
-		return { dates, '2Y': yields2Y, '10Y': yields10Y, spread: spreads };
+		yields2Y.push(Number(base2Y.toFixed(2)));
+		yields10Y.push(Number(base10Y.toFixed(2)));
+		spreads.push(Number((base10Y - base2Y).toFixed(2)));
 	}
-
-	try {
-		// Fetch last 90 observations for both series
-		const [data2Y, data10Y] = await Promise.all([
-			fetch(`https://api.stlouisfed.org/fred/series/observations?series_id=${TREASURY_SERIES['2Y']}&sort_order=desc&limit=90&api_key=${FRED_API_KEY}&file_type=json`).then(r => r.json()),
-			fetch(`https://api.stlouisfed.org/fred/series/observations?series_id=${TREASURY_SERIES['10Y']}&sort_order=desc&limit=90&api_key=${FRED_API_KEY}&file_type=json`).then(r => r.json())
-		]);
-
-		if (!data2Y.observations || !data10Y.observations) {
-			throw new Error('Invalid FRED response');
-		}
-
-		// Merge and align dates
-		const yield2YMap = new Map(data2Y.observations.map((o: {date: string, value: string}) => [o.date, parseFloat(o.value)]));
-		const yield10YMap = new Map(data10Y.observations.map((o: {date: string, value: string}) => [o.date, parseFloat(o.value)]));
-
-		// Get common dates (sorted ascending)
-		const allDates = [...new Set([...yield2YMap.keys(), ...yield10YMap.keys()])].sort();
-		
-		const dates: string[] = [];
-		const yields2Y: number[] = [];
-		const yields10Y: number[] = [];
-		const spreads: number[] = [];
-
-		for (const date of allDates) {
-			const y2 = yield2YMap.get(date);
-			const y10 = yield10YMap.get(date);
-			
-			if (y2 !== undefined && y10 !== undefined && typeof y2 === 'number' && typeof y10 === 'number' && !isNaN(y2) && !isNaN(y10)) {
-				dates.push(date);
-				yields2Y.push(Number(y2));
-				yields10Y.push(Number(y10));
-				spreads.push(parseFloat((Number(y10) - Number(y2)).toFixed(2)));
-			}
-		}
-
-		return { dates, '2Y': yields2Y, '10Y': yields10Y, spread: spreads };
-	} catch (error) {
-		logger.error('Treasury API', 'Error fetching yield history:', error);
-		// Return demo data
-		return fetchYieldCurveHistory(); // Recursive call will use demo path
-	}
+	
+	return { dates, '2Y': yields2Y, '10Y': yields10Y, spread: spreads };
 }

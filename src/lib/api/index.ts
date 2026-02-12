@@ -26,3 +26,10 @@ export {
 export type { FearGreedData, FearGreedResponse, FearGreedClassification } from './feargreed';
 export { fetchYieldCurve, fetchYieldCurveHistory } from './treasury';
 export type { TreasuryYield, YieldCurveData } from './treasury';
+export {
+	fetchStockQuote,
+	fetchEarningsCalendar,
+	calculateDaysToEarnings,
+	isAlphaVantageConfigured
+} from './alphavantage';
+export { fetchMoveIndex, type MoveIndexData } from './moveIndex';

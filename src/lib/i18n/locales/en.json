@@ -7,6 +7,8 @@
 	"header.lastUpdated": "Last updated: {{time}}",
 	"header.neverRefreshed": "Never refreshed",
 	"header.refreshing": "Refreshing...",
+	"header.enterFullscreen": "Fullscreen",
+	"header.exitFullscreen": "Exit Fullscreen",
 	
 	"settings.title": "Settings",
 	"settings.panels.title": "Enabled Panels",

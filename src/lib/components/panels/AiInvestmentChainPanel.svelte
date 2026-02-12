@@ -1,9 +1,19 @@
 <script lang="ts">
 	import { Panel } from '$lib/components/common';
 	import { t } from '$lib/stores';
+	import { onMount } from 'svelte';
+
+	// Calculate actual days to NVIDIA earnings (Feb 25, 2026)
+	function calculateDaysToEarnings(): number {
+		const earningsDate = new Date('2026-02-25T00:00:00Z');
+		const now = new Date();
+		const diff = earningsDate.getTime() - now.getTime();
+		const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+		return days > 0 ? days : 0;
+	}
 
 	let aiData = $state({
-		nvidiaEarningsCountdown: 45,
+		nvidiaEarningsCountdown: calculateDaysToEarnings(),
 		tsmcCapacity: 88,
 		powerGrowth: 18,
 		concentration: 42
@@ -11,8 +21,14 @@
 	let loading = $state(false);
 	let error: string | null = $state(null);
 
-	// Simulate data load
-	// In real, fetch from APIs
+	onMount(() => {
+		// Update countdown daily
+		const interval = setInterval(() => {
+			aiData.nvidiaEarningsCountdown = calculateDaysToEarnings();
+		}, 1000 * 60 * 60); // Update every hour
+
+		return () => clearInterval(interval);
+	});
 </script>
 
 <Panel id="aiinvestment" title={$t('panels.aiinvestment.name')} {loading} {error}>

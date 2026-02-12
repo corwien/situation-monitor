@@ -7,6 +7,8 @@
 	"header.lastUpdated": "更新于 {{time}}",
 	"header.neverRefreshed": "未更新",
 	"header.refreshing": "刷新中...",
+	"header.enterFullscreen": "全屏",
+	"header.exitFullscreen": "退出全屏",
 	
 	"settings.title": "设置",
 	"settings.panels.title": "面板管理",

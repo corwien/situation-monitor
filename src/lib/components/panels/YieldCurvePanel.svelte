@@ -33,6 +33,15 @@
 <Panel id="yieldcurve" title={$t('panels.yieldcurve.name')} {loading} {error}>
 	{#if data}
 		<div class="yield-container">
+			<!-- Data Source Indicator -->
+			<div class="data-source" class:api={data.dataSource === 'api'} class:demo={data.dataSource === 'demo'}>
+				{#if data.dataSource === 'api'}
+					<span class="badge">LIVE</span>
+				{:else}
+					<span class="badge">Demo</span>
+				{/if}
+			</div>
+			
 			<!-- Main Yield Display -->
 			<div class="yield-row">
 				<div class="yield-item">
@@ -79,6 +88,28 @@
 <style>
 	.yield-container {
 		padding: 0.5rem 0;
+	}
+	
+	.data-source {
+		display: flex;
+		justify-content: center;
+		margin-bottom: 0.75rem;
+	}
+	
+	.data-source .badge {
+		font-size: 0.5rem;
+		padding: 0.15rem 0.4rem;
+		border-radius: 3px;
+	}
+	
+	.data-source.api .badge {
+		background: rgba(0, 255, 136, 0.2);
+		color: var(--success);
+	}
+	
+	.data-source.demo .badge {
+		background: rgba(128, 128, 128, 0.2);
+		color: gray;
 	}
 	
 	.yield-row {
