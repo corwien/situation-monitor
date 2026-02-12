@@ -15,22 +15,23 @@
 	// Get label based on current locale
 	function getLocalizedLabel(classification: string): string {
 		if (!classification) return '';
-		// If Chinese locale, use the Chinese translation keys
-		if ($locale === 'zh') {
-			const key = `panels.feargreed.${classification.toLowerCase().replace(/\s+/g, '')}.zh`;
-			return $t(key as import('$lib/i18n/translations').TranslationKey);
+		// Map classification to translation key
+		const keyMap: Record<string, string> = {
+			'Extreme Fear': 'extremeFear',
+			'Fear': 'fear',
+			'Neutral': 'neutral',
+			'Greed': 'greed',
+			'Extreme Greed': 'extremeGreed'
+		};
+		const key = keyMap[classification];
+		if (key) {
+			return $t(`panels.feargreed.${key}` as import('$lib/i18n/translations').TranslationKey);
 		}
-		// For English, use the label from API or translation
-		const label = getFearGreedLabel(classification);
-		// If label is already Chinese (from API), return classification instead
-		if (/[\u4e00-\u9fa5]/.test(label)) {
-			return classification;
-		}
-		return label;
+		return classification;
 	}
 	
 	const label = $derived(classification ? getLocalizedLabel(classification) : '');
-	const sentimentClass = $derived(getFearGreedClass(value));
+	const sentimentClass = $derived(value !== undefined ? getFearGreedClass(value) : '');
 </script>
 
 <Panel id="feargreed" title={$t('panels.feargreed.name')} count={status} {loading} {error}>
@@ -40,18 +41,15 @@
 		<div class="fear-greed-container">
 			<div class="gauge-container">
 				<div class="gauge">
-					<div class="gauge-value {sentimentClass}">{value}</div>
+					<div class="gauge-value {sentimentClass}" class:extreme-low={typeof value === 'number' && value < 10}>{value}</div>
 					<div class="gauge-label">{$t('panels.feargreed.index')}</div>
 				</div>
 			</div>
 			<div class="sentiment {sentimentClass}">
 				{label}
 			</div>
-			<div class="classification">
-				<span class="en">{classification}</span>
-				{#if $locale === 'en' && classification}
-					<span class="local">{getFearGreedLabel(classification)}</span>
-				{/if}
+			<div class="percentile">
+				{$t('panels.feargreed.percentile')}: {$fearGreed.percentile ?? '--'}%
 			</div>
 		</div>
 	{/if}
@@ -124,6 +122,12 @@
 
 	.gauge-value.extreme-greed {
 		color: var(--success);
+	}
+
+	.gauge-value.extreme-low {
+		color: #ff0000;
+		font-weight: 900;
+		text-shadow: 0 0 10px rgba(255, 0, 0, 0.5);
 	}
 
 	.gauge-label {

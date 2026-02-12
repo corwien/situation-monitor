@@ -22,7 +22,10 @@
 		WorldLeadersPanel,
 		PrinterPanel,
 		FedPanel,
-		FearGreedPanel
+		FearGreedPanel,
+		YieldCurvePanel,
+		MoveIndexPanel,
+		AiInvestmentChainPanel
 	} from '$lib/components/panels';
 	import {
 		news,
@@ -34,7 +37,8 @@
 		fedIndicators,
 		fedNews,
 		fearGreed,
-	locale
+		treasury,
+		locale
 	} from '$lib/stores';
 	import {
 		fetchAllNews,
@@ -46,7 +50,9 @@
 		fetchWorldLeaders,
 		fetchFedIndicators,
 		fetchFedNews,
-		fetchFearGreedIndex
+		fetchFearGreedIndex,
+		fetchFearGreedHistory,
+		fetchYieldCurve
 	} from '$lib/api';
 	import type { Prediction, WhaleTransaction, Contract, Layoff } from '$lib/api';
 	import type { CustomMonitor, WorldLeader } from '$lib/types';
@@ -142,13 +148,38 @@
 		if (!isPanelVisible('feargreed')) return;
 		fearGreed.setLoading(true);
 		try {
-			const data = await fetchFearGreedIndex();
-			if (data) {
-				fearGreed.setData(data);
+			// Load historical data (includes current and percentile)
+			const historyResult = await fetchFearGreedHistory(365); // Last 365 days for percentile
+			
+			if (historyResult && historyResult.current) {
+				console.log('FearGreed data loaded:', {
+					current: historyResult.current.value,
+					percentile: historyResult.percentile,
+					historyLength: historyResult.history.length
+				});
+				fearGreed.setData(historyResult.current, historyResult.history, historyResult.percentile);
+			} else {
+				// Fallback to just current data if history fails
+				const currentData = await fetchFearGreedIndex();
+				if (currentData) {
+					fearGreed.setData(currentData);
+				}
 			}
 		} catch (error) {
 			console.error('Failed to load Fear & Greed data:', error);
 			fearGreed.setError(String(error));
+		}
+	}
+
+	async function loadTreasuryData() {
+		if (!isPanelVisible('yieldcurve')) return;
+		treasury.setLoading(true);
+		try {
+			const data = await fetchYieldCurve();
+			treasury.setData(data);
+		} catch (error) {
+			console.error('Failed to load Treasury data:', error);
+			treasury.setError(String(error));
 		}
 	}
 
@@ -221,7 +252,8 @@
 					loadMiscData(),
 					loadWorldLeaders(),
 					loadFedData(),
-					loadFearGreedData()
+					loadFearGreedData(),
+					loadTreasuryData()
 				]);
 				refresh.endRefresh();
 			} catch (error) {
@@ -313,6 +345,24 @@
 			{#if isPanelVisible('feargreed')}
 				<div class="panel-slot">
 					<FearGreedPanel />
+				</div>
+			{/if}
+
+			{#if isPanelVisible('yieldcurve')}
+				<div class="panel-slot">
+					<YieldCurvePanel />
+				</div>
+			{/if}
+
+			{#if isPanelVisible('moveindex')}
+				<div class="panel-slot">
+					<MoveIndexPanel />
+				</div>
+			{/if}
+
+			{#if isPanelVisible('aiinvestment')}
+				<div class="panel-slot">
+					<AiInvestmentChainPanel />
 				</div>
 			{/if}
 

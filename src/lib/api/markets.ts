@@ -99,9 +99,9 @@ const ETF_TO_INDEX_MULTIPLIERS: Record<string, number> = {
 };
 
 /**
- * Fetch a quote from Finnhub
+ * Internal implementation to fetch a quote from Finnhub
  */
-async function fetchFinnhubQuote(symbol: string): Promise<FinnhubQuote | null> {
+async function fetchFinnhubQuoteInternal(symbol: string): Promise<FinnhubQuote | null> {
 	try {
 		const url = `${FINNHUB_BASE_URL}/quote?symbol=${encodeURIComponent(symbol)}&token=${FINNHUB_API_KEY}`;
 		const response = await fetch(url);
@@ -122,6 +122,14 @@ async function fetchFinnhubQuote(symbol: string): Promise<FinnhubQuote | null> {
 		logger.error('Markets API', `Error fetching quote for ${symbol}:`, error);
 		return null;
 	}
+}
+
+/**
+ * Public API to fetch a quote from Finnhub
+ * Exported for use by panels like MoveIndexPanel
+ */
+export async function fetchFinnhubQuote(symbol: string): Promise<FinnhubQuote | null> {
+	return await fetchFinnhubQuoteInternal(symbol);
 }
 
 /**
@@ -211,7 +219,7 @@ export async function fetchIndices(): Promise<MarketItem[]> {
 		const quotes = await Promise.all(
 			INDICES.map(async (index) => {
 				const etfSymbol = INDEX_ETF_MAP[index.symbol] || index.symbol;
-				const quote = await fetchFinnhubQuote(etfSymbol);
+				const quote = await fetchFinnhubQuoteInternal(etfSymbol);
 				return { index, quote, etfSymbol };
 			})
 		);
@@ -271,7 +279,7 @@ export async function fetchSectorPerformance(): Promise<SectorPerformance[]> {
 
 		const quotes = await Promise.all(
 			SECTORS.map(async (sector) => {
-				const quote = await fetchFinnhubQuote(sector.symbol);
+				const quote = await fetchFinnhubQuoteInternal(sector.symbol);
 				return { sector, quote };
 			})
 		);
@@ -336,7 +344,7 @@ export async function fetchCommodities(): Promise<MarketItem[]> {
 		const quotes = await Promise.all(
 			COMMODITIES.map(async (commodity) => {
 				const finnhubSymbol = COMMODITY_SYMBOL_MAP[commodity.symbol] || commodity.symbol;
-				const quote = await fetchFinnhubQuote(finnhubSymbol);
+				const quote = await fetchFinnhubQuoteInternal(finnhubSymbol);
 				return { commodity, quote };
 			})
 		);

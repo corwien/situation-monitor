@@ -50,7 +50,10 @@
 	"panels.correlation.name": "关联引擎",
 	"panels.narrative.name": "叙事追踪",
 	"panels.fed.name": "美联储",
-	"panels.feargreed.name": "恐惧贪婪",
+	"panels.feargreed.name": "恐惧贪婪指数",
+	"panels.yieldcurve.name": "收益率曲线",
+	"panels.moveindex.name": "MOVE 指数",
+	"panels.aiinvestment.name": "AI 投资链",
 	
 	"panels.markets.empty": "暂无行情数据",
 	"panels.heatmap.empty": "暂无板块数据",
@@ -81,6 +84,7 @@
 	"panels.feargreed.neutral.zh": "中性",
 	"panels.feargreed.greed.zh": "贪婪",
 	"panels.feargreed.extremeGreed.zh": "极度贪婪",
+	"panels.feargreed.percentile": "历史百分位",
 	
 	"panels.monitors.active": "{{count}} 个活跃",
 	"panels.monitors.empty": "未配置监控",

@@ -33,7 +33,10 @@ export type PanelId =
 	| 'correlation'
 	| 'narrative'
 	| 'fed'
-	| 'feargreed';
+	| 'feargreed'
+	| 'yieldcurve'
+	| 'moveindex'
+	| 'aiinvestment';
 
 export const PANELS: Record<PanelId, PanelConfig> = {
 	map: { name: 'Global Map', priority: 1 },
@@ -61,7 +64,10 @@ export const PANELS: Record<PanelId, PanelConfig> = {
 	correlation: { name: 'Correlation Engine', priority: 1 },
 	narrative: { name: 'Narrative Tracker', priority: 1 },
 	fed: { name: 'Federal Reserve', priority: 1 },
-	feargreed: { name: 'Fear & Greed Index', priority: 2 }
+	feargreed: { name: 'Fear & Greed Index', priority: 2 },
+	yieldcurve: { name: 'Yield Curve', priority: 1 },
+	moveindex: { name: 'MOVE Index', priority: 1 },
+	aiinvestment: { name: 'AI Investment Chain', priority: 2 }
 };
 
 export const NON_DRAGGABLE_PANELS: PanelId[] = ['map'];

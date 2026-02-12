@@ -51,6 +51,9 @@
 	"panels.narrative.name": "Narrative Tracker",
 	"panels.fed.name": "Federal Reserve",
 	"panels.feargreed.name": "Fear & Greed Index",
+	"panels.yieldcurve.name": "Yield Curve",
+	"panels.moveindex.name": "MOVE Index",
+	"panels.aiinvestment.name": "AI Investment Chain",
 	
 	"panels.markets.empty": "No market data available",
 	"panels.heatmap.empty": "No sector data available",
@@ -81,6 +84,7 @@
 	"panels.feargreed.neutral.zh": "中性",
 	"panels.feargreed.greed.zh": "贪婪",
 	"panels.feargreed.extremeGreed.zh": "极度贪婪",
+	"panels.feargreed.percentile": "Historical Percentile",
 	
 	"panels.monitors.active": "{{count}} active",
 	"panels.monitors.empty": "No monitors configured",

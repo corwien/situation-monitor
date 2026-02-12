@@ -7,6 +7,8 @@ import type { FearGreedData } from '$lib/api';
 
 export interface FearGreedState {
 	data: FearGreedData | null;
+	history: FearGreedData[]; // For percentile calculation
+	percentile: number | null; // Historical percentile
 	loading: boolean;
 	error: string | null;
 	lastUpdated: number | null;
@@ -15,6 +17,8 @@ export interface FearGreedState {
 function createFearGreedStore() {
 	const { subscribe, set, update } = writable<FearGreedState>({
 		data: null,
+		history: [],
+		percentile: null,
 		loading: false,
 		error: null,
 		lastUpdated: null
@@ -48,10 +52,12 @@ function createFearGreedStore() {
 		/**
 		 * Set Fear & Greed data
 		 */
-		setData(data: FearGreedData) {
+		setData(data: FearGreedData, history: FearGreedData[] = [], percentile: number | null = null) {
 			update((state) => ({
 				...state,
 				data,
+				history,
+				percentile,
 				loading: false,
 				error: null,
 				lastUpdated: Date.now()
@@ -64,6 +70,8 @@ function createFearGreedStore() {
 		clear() {
 			set({
 				data: null,
+				history: [],
+				percentile: null,
 				loading: false,
 				error: null,
 				lastUpdated: null

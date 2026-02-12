@@ -55,9 +55,39 @@
 	function getTypeVariant(type: string): BadgeVariant {
 		return TYPE_VARIANTS[type] || 'default';
 	}
+
+	// Fed Countdown
+	const nextMeetingDate = new Date('2026-03-18T00:00:00Z');
+	
+	let countdown = $state<{ days: number; hours: number } | null>(null);
+	
+	$effect(() => {
+		const now = new Date();
+		const diff = nextMeetingDate.getTime() - now.getTime();
+		if (diff <= 0) {
+			countdown = null;
+		} else {
+			const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+			const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+			countdown = { days, hours };
+		}
+	});
 </script>
 
 <Panel id="fed" title={$t('panels.fed.name')} count={newsState.items.length} {loading} {error}>
+	<!-- Fed Meeting Countdown -->
+	<div class="countdown-section">
+		<div class="countdown-title">Next FOMC Meeting</div>
+		<div class="countdown-time">
+			{#if countdown}
+				{countdown.days} days, {countdown.hours} hours
+			{:else}
+				No upcoming meeting
+			{/if}
+		</div>
+		<div class="countdown-date">March 18, 2026 (Rate Decision)</div>
+	</div>
+
 	<!-- Economic Indicators -->
 	{#if hasApiKey && indicatorList.length > 0}
 		<div class="indicators-section">

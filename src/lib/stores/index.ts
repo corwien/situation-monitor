@@ -90,3 +90,13 @@ export {
 	fearGreedLastUpdated,
 	type FearGreedState
 } from './feargreed';
+
+// Treasury/Yield Curve store
+export {
+	treasury,
+	yield2Y,
+	yield10Y,
+	yieldSpread,
+	isYieldCurveInverted,
+	type TreasuryState
+} from './treasury';
