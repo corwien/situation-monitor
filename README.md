@@ -28,7 +28,12 @@
 
 ---
 
-## 🚀 快速部署
+## 🚀 部署指南
+
+支持两种部署方式：
+
+- **[🐳 Docker 部署](#-docker-容器化部署)** - 推荐，简单快捷
+- **[☁️ 手动部署](#-手动部署)** - 精细控制，适合有特殊需求的用户
 
 ### 环境要求
 
@@ -145,6 +150,209 @@ sudo systemctl status nginx
 
 ---
 
+## 🐳 Docker 容器化部署
+
+### 环境要求
+
+- Docker 20.10+
+- Docker Compose 2.0+
+- Git
+
+### 1. 克隆源码
+
+```bash
+cd /root/clawd
+git clone https://github.com/corwien/situation-monitor.git
+cd situation-monitor
+```
+
+### 2. 配置环境变量
+
+```bash
+# 复制环境变量模板
+cp .env.example .env
+
+# 编辑配置（Docker不需要修改，构建时嵌入）
+nano .env
+```
+
+> **注意:** 在Docker构建时，`.env`文件中的变量会被嵌入到前端代码中。
+
+### 3. 构建并运行
+
+#### 方式一：直接使用Docker
+
+```bash
+# 构建镜像
+docker build -t situation-monitor .
+
+# 运行容器
+docker run -d \
+  --name situation-monitor \
+  -p 80:80 \
+  situation-monitor
+```
+
+#### 方式二：使用Docker Compose（推荐）
+
+```bash
+# 创建 docker-compose.yml（项目已包含）
+# 直接启动
+docker compose up -d
+
+# 查看日志
+docker compose logs -f
+
+# 停止服务
+docker compose down
+```
+
+**docker-compose.yml 内容：**
+
+```yaml
+version: '3.8'
+
+services:
+  situation-monitor:
+    build: .
+    container_name: situation-monitor
+    ports:
+      - "80:80"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+```
+
+### 4. 验证部署
+
+```bash
+# 访问仪表板
+curl http://localhost/
+
+# 检查容器状态
+docker ps | grep situation-monitor
+```
+
+### 5. 更新部署
+
+```bash
+# 拉取最新代码
+git pull origin main
+
+# 重新构建并启动
+docker compose up -d --build
+
+# 或只重启（无需重新构建）
+docker compose restart
+```
+
+### Docker 镜像结构
+
+```
++------------------+
+|  Nginx (端口80)   |
+|  - SPA路由支持    |
+|  - FRED API代理   |
+|  - Gzip压缩       |
++------------------+
+|  Node.js 构建层   |
+|  - SvelteKit     |
+|  - 静态资源输出   |
++------------------+
+```
+
+### Docker 部署优势
+
+| 优势 | 说明 |
+|------|------|
+| 🚀 **快速部署** | 一键启动，无需手动配置Nginx |
+| 🔒 **环境隔离** | 容器内环境一致，不受主机影响 |
+| 📦 **版本管理** | 通过标签管理不同版本 |
+| 🔄 **自动重启** | 容器崩溃自动恢复 |
+| 📊 **健康检查** | 内置健康检查机制 |
+
+---
+
+## ☁️ 手动部署
+
+### 环境要求
+
+- Node.js 18+
+- npm 或 pnpm
+- Nginx（用于反向代理和静态文件服务）
+- Git
+
+### 1. 克隆源码
+
+```bash
+cd /root/clawd
+git clone https://github.com/corwien/situation-monitor.git
+cd situation-monitor
+```
+
+### 2. 安装依赖
+
+```bash
+npm install
+# 或使用 pnpm
+pnpm install
+```
+
+### 3. 配置环境变量
+
+```bash
+# 复制环境变量模板
+cp .env.example .env
+
+# 编辑配置
+nano .env
+```
+
+### 4. 构建项目
+
+```bash
+npm run build
+```
+
+构建产物将生成在 `build/` 目录。
+
+### 5. 配置Nginx
+
+```bash
+# 复制Nginx配置
+sudo cp /etc/nginx/sites-available/situation-monitor /etc/nginx/sites-enabled/
+
+# 测试配置
+sudo nginx -t
+
+# 重载Nginx
+sudo systemctl reload nginx
+```
+
+### 6. 部署静态文件
+
+```bash
+# 复制构建产物到Web目录
+sudo rm -rf /var/www/situation-monitor/*
+sudo cp -r build/* /var/www/situation-monitor/
+sudo chown -R www-data:www-data /var/www/situation-monitor
+```
+
+### 7. 验证部署
+
+```bash
+# 访问仪表板
+curl http://66.42.42.182/
+
+# 检查Nginx状态
+sudo systemctl status nginx
+```
+
+---
+
 ## 📁 目录结构
 
 ```
@@ -193,7 +401,9 @@ situation-monitor/
 ├── package.json
 ├── svelte.config.js
 ├── vite.config.ts
-└── nginx.conf
+├── nginx.conf                   # Nginx配置（Docker/手动）
+├── Dockerfile                   # Docker构建文件
+└── docker-compose.yml          # Docker Compose配置
 ```
 
 ---
@@ -209,7 +419,7 @@ situation-monitor/
 | **样式** | Tailwind CSS |
 | **状态管理** | Svelte Stores |
 | **国际化** | 自研i18n方案 |
-| **部署** | Nginx + Static Adapter |
+| **部署** | Docker / Nginx + Static Adapter |
 
 ### 数据流架构
 
