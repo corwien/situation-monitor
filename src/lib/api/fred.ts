@@ -7,6 +7,10 @@
 
 import { FRED_API_KEY, FRED_BASE_URL, logger, fetchWithProxy } from '$lib/config/api';
 
+/**
+ * Use Nginx proxy for FRED API to bypass CORS
+ */
+
 export interface FredObservation {
 	date: string;
 	value: string;
@@ -56,10 +60,12 @@ function createEmptyIndicator(seriesId: string, name: string, unit: string): Eco
 
 /**
  * Fetch a single FRED series with the latest 2 observations
+ * Uses Nginx proxy (/api/fred/) to bypass CORS
  */
 async function fetchFredSeries(seriesId: string): Promise<FredObservation[]> {
 	try {
-		const url = `${FRED_BASE_URL}/series/observations?series_id=${seriesId}&api_key=${FRED_API_KEY}&file_type=json&sort_order=desc&limit=2`;
+		// Use Nginx proxy to bypass CORS
+		const url = `/api/fred/series/observations?series_id=${seriesId}&api_key=${FRED_API_KEY}&file_type=json&sort_order=desc&limit=2`;
 		const response = await fetch(url);
 
 		if (!response.ok) {
@@ -126,7 +132,8 @@ async function fetchCPI(): Promise<EconomicIndicator> {
 
 	try {
 		// Fetch 14 observations: current + 12 months ago, plus previous month + 13 months ago
-		const url = `${FRED_BASE_URL}/series/observations?series_id=${seriesId}&api_key=${FRED_API_KEY}&file_type=json&sort_order=desc&limit=14`;
+		// Use Nginx proxy to bypass CORS
+		const url = `/api/fred/series/observations?series_id=${seriesId}&api_key=${FRED_API_KEY}&file_type=json&sort_order=desc&limit=14`;
 		const response = await fetch(url);
 
 		if (!response.ok) {

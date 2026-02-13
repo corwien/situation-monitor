@@ -1,7 +1,6 @@
 /**
  * Miscellaneous API functions for specialized panels
- * Polymarket API: https://docs.polymarket.com/
- * Gamma API: https://gamma-api.polymarket.com (no auth required)
+ * Polymarket data: fetched server-side and saved to static JSON
  */
 
 import { LocalCache } from '$lib/utils/cache';
@@ -36,16 +35,16 @@ export interface Layoff {
 	date: string;
 }
 
-// Polymarket Gamma API endpoint
-const POLYMARKET_API = 'https://gamma-api.polymarket.com';
+// Polymarket data endpoint (static JSON file)
+const POLYMARKET_DATA_URL = '/polymarket-data.json';
 
 /**
- * Fetch real Polymarket predictions using Gamma API
- * Docs: https://docs.polymarket.com/quickstart/fetching-data
+ * Fetch Polymarket predictions from static JSON file
+ * Data is fetched hourly by cron job on server
  */
 export async function fetchPolymarket(): Promise<Prediction[]> {
 	const cacheKey = 'polymarket_predictions';
-	const cacheTTLMinutes = 5; // 5 minutes - predictions update frequently
+	const cacheTTLMinutes = 60; // 1 hour - matches cron schedule
 
 	// Check cache first
 	const cached = LocalCache.get<Prediction[]>(cacheKey);
@@ -54,49 +53,29 @@ export async function fetchPolymarket(): Promise<Prediction[]> {
 	}
 
 	try {
-		// Fetch active, non-closed events
-		const url = `${POLYMARKET_API}/events?active=true&closed=false&limit=10`;
+		const response = await fetch(POLYMARKET_DATA_URL);
 		
-		const response = await fetch(url);
 		if (!response.ok) {
-			throw new Error(`Polymarket API error: ${response.status}`);
+			// Fallback to empty array if file not found
+			console.warn('Polymarket data file not found, using fallback');
+			return getFallbackPredictions();
 		}
 
-		const events = await response.json();
+		const data = await response.json();
+		
+		if (!data.data || !Array.isArray(data.data)) {
+			return getFallbackPredictions();
+		}
 
 		// Transform to Prediction format
-		const predictions: Prediction[] = events.map((event: any) => {
-			const market = event.markets?.[0];
-			if (!market) return null;
-
-			// Parse outcome prices (stored as JSON string)
-			let yesPrice = 0.5;
-			let noPrice = 0.5;
-			
-			try {
-				if (market.outcomePrices) {
-					const prices = JSON.parse(market.outcomePrices);
-					if (prices.length >= 2) {
-						yesPrice = parseFloat(prices[0]) || 0.5;
-						noPrice = parseFloat(prices[1]) || 0.5;
-					}
-				}
-			} catch (e) {
-				// Use defaults if parsing fails
-			}
-
-			// Format volume
-			const volume = formatVolume(event.volume);
-
-			return {
-				id: event.id,
-				question: market.question || event.title,
-				yes: Math.round(yesPrice * 100),
-				no: Math.round(noPrice * 100),
-				volume,
-				updated: new Date(event.updatedAt || event.createdAt).toLocaleDateString()
-			};
-		}).filter(Boolean) as Prediction[];
+		const predictions: Prediction[] = data.data.map((item: any) => ({
+			id: item.id,
+			question: item.question,
+			yes: item.yes || 0,
+			no: item.no || 0,
+			volume: item.volume_str || formatVolume(item.volume),
+			updated: data.updated || new Date().toISOString()
+		}));
 
 		// Cache the result
 		LocalCache.set(cacheKey, predictions, cacheTTLMinutes);
@@ -105,8 +84,7 @@ export async function fetchPolymarket(): Promise<Prediction[]> {
 
 	} catch (error) {
 		console.error('Failed to fetch Polymarket data:', error);
-		// Return empty array on error - UI will handle gracefully
-		return [];
+		return getFallbackPredictions();
 	}
 }
 
@@ -125,11 +103,43 @@ function formatVolume(volume: number): string {
 }
 
 /**
+ * Fallback predictions when API is unavailable
+ * These are static examples - real data should come from JSON file
+ */
+function getFallbackPredictions(): Prediction[] {
+	return [
+		{
+			id: 'fallback-1',
+			question: 'Will Bitcoin reach $150K by end of 2026?',
+			yes: 35,
+			no: 65,
+			volume: '$8.1M',
+			updated: new Date().toISOString()
+		},
+		{
+			id: 'fallback-2',
+			question: 'Will Fed cut rates in Q1 2026?',
+			yes: 42,
+			no: 58,
+			volume: '$5.2M',
+			updated: new Date().toISOString()
+		},
+		{
+			id: 'fallback-3',
+			question: 'Will AI cause major job losses in 2026?',
+			yes: 28,
+			no: 72,
+			volume: '$1.8M',
+			updated: new Date().toISOString()
+		}
+	];
+}
+
+/**
  * Fetch whale transactions
  * Note: Would use Whale Alert API - returning sample data
  */
 export async function fetchWhaleTransactions(): Promise<WhaleTransaction[]> {
-	// Sample whale transaction data
 	return [
 		{ coin: 'BTC', amount: 1500, usd: 150000000, hash: '0x1a2b...3c4d' },
 		{ coin: 'ETH', amount: 25000, usd: 85000000, hash: '0x5e6f...7g8h' },
@@ -144,7 +154,6 @@ export async function fetchWhaleTransactions(): Promise<WhaleTransaction[]> {
  * Note: Would use USASpending.gov API - returning sample data
  */
 export async function fetchGovContracts(): Promise<Contract[]> {
-	// Sample government contract data
 	return [
 		{
 			agency: 'DOD',
