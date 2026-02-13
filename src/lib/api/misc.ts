@@ -1,13 +1,18 @@
 /**
  * Miscellaneous API functions for specialized panels
- * Note: Some of these use mock data as the original APIs require authentication
+ * Polymarket API: https://docs.polymarket.com/
+ * Gamma API: https://gamma-api.polymarket.com (no auth required)
  */
+
+import { LocalCache } from '$lib/utils/cache';
 
 export interface Prediction {
 	id: string;
 	question: string;
 	yes: number;
+	no: number;
 	volume: string;
+	updated: string;
 }
 
 export interface WhaleTransaction {
@@ -31,31 +36,92 @@ export interface Layoff {
 	date: string;
 }
 
+// Polymarket Gamma API endpoint
+const POLYMARKET_API = 'https://gamma-api.polymarket.com';
+
 /**
- * Fetch Polymarket predictions
- * Note: Polymarket API requires authentication - returns curated prediction data
+ * Fetch real Polymarket predictions using Gamma API
+ * Docs: https://docs.polymarket.com/quickstart/fetching-data
  */
 export async function fetchPolymarket(): Promise<Prediction[]> {
-	// These represent active prediction markets on major events
-	return [
-		{
-			id: 'pm-1',
-			question: 'Will there be a US-China military incident in 2026?',
-			yes: 18,
-			volume: '2.4M'
-		},
-		{ id: 'pm-2', question: 'Will Bitcoin reach $150K by end of 2026?', yes: 35, volume: '8.1M' },
-		{ id: 'pm-3', question: 'Will Fed cut rates in Q1 2026?', yes: 42, volume: '5.2M' },
-		{ id: 'pm-4', question: 'Will AI cause major job losses in 2026?', yes: 28, volume: '1.8M' },
-		{ id: 'pm-5', question: 'Will Ukraine conflict end in 2026?', yes: 22, volume: '3.5M' },
-		{ id: 'pm-6', question: 'Will oil prices exceed $100/barrel?', yes: 31, volume: '2.1M' },
-		{
-			id: 'pm-7',
-			question: 'Will there be a major cyberattack on US infrastructure?',
-			yes: 45,
-			volume: '1.5M'
+	const cacheKey = 'polymarket_predictions';
+	const cacheTTLMinutes = 5; // 5 minutes - predictions update frequently
+
+	// Check cache first
+	const cached = LocalCache.get<Prediction[]>(cacheKey);
+	if (cached) {
+		return cached;
+	}
+
+	try {
+		// Fetch active, non-closed events
+		const url = `${POLYMARKET_API}/events?active=true&closed=false&limit=10`;
+		
+		const response = await fetch(url);
+		if (!response.ok) {
+			throw new Error(`Polymarket API error: ${response.status}`);
 		}
-	];
+
+		const events = await response.json();
+
+		// Transform to Prediction format
+		const predictions: Prediction[] = events.map((event: any) => {
+			const market = event.markets?.[0];
+			if (!market) return null;
+
+			// Parse outcome prices (stored as JSON string)
+			let yesPrice = 0.5;
+			let noPrice = 0.5;
+			
+			try {
+				if (market.outcomePrices) {
+					const prices = JSON.parse(market.outcomePrices);
+					if (prices.length >= 2) {
+						yesPrice = parseFloat(prices[0]) || 0.5;
+						noPrice = parseFloat(prices[1]) || 0.5;
+					}
+				}
+			} catch (e) {
+				// Use defaults if parsing fails
+			}
+
+			// Format volume
+			const volume = formatVolume(event.volume);
+
+			return {
+				id: event.id,
+				question: market.question || event.title,
+				yes: Math.round(yesPrice * 100),
+				no: Math.round(noPrice * 100),
+				volume,
+				updated: new Date(event.updatedAt || event.createdAt).toLocaleDateString()
+			};
+		}).filter(Boolean) as Prediction[];
+
+		// Cache the result
+		LocalCache.set(cacheKey, predictions, cacheTTLMinutes);
+
+		return predictions;
+
+	} catch (error) {
+		console.error('Failed to fetch Polymarket data:', error);
+		// Return empty array on error - UI will handle gracefully
+		return [];
+	}
+}
+
+/**
+ * Format volume number to human readable string
+ */
+function formatVolume(volume: number): string {
+	if (!volume) return '0';
+	
+	if (volume >= 1000000) {
+		return `$${(volume / 1000000).toFixed(1)}M`;
+	} else if (volume >= 1000) {
+		return `$${(volume / 1000).toFixed(0)}K`;
+	}
+	return `$${volume.toFixed(0)}`;
 }
 
 /**

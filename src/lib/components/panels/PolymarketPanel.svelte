@@ -1,14 +1,7 @@
 <script lang="ts">
 	import { Panel } from '$lib/components/common';
 	import { t } from '$lib/stores';
-
-	interface Prediction {
-		id: string;
-		question: string;
-		yes: number;
-		volume: number | string;
-		url?: string;
-	}
+	import type { Prediction } from '$lib/api';
 
 	interface Props {
 		predictions?: Prediction[];
@@ -20,12 +13,9 @@
 
 	const count = $derived(predictions.length);
 
-	function formatVolume(v: number | string): string {
-		if (typeof v === 'string') return '$' + v;
+	function formatVolume(v: string): string {
 		if (!v) return '$0';
-		if (v >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M';
-		if (v >= 1e3) return '$' + (v / 1e3).toFixed(0) + 'K';
-		return '$' + v.toFixed(0);
+		return '$' + v;
 	}
 </script>
 
