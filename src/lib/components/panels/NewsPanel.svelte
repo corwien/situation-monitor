@@ -33,7 +33,7 @@
 		<div class="empty-state">{$t('panels.news.empty')}</div>
 	{:else}
 		<div class="news-list">
-			{#each items.slice(0, 15) as item (item.id)}
+			{#each items.slice(0, 10) as item (item.id)}
 				<NewsItem {item} />
 			{/each}
 		</div>

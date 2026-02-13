@@ -1,8 +1,7 @@
 /**
- * Markets API - Fetch market data from Finnhub
- *
- * Get your free API key at: https://finnhub.io/
- * Free tier: 60 calls/minute
+ * Markets API - Fetch market data
+ * - Crypto: CoinGecko (free, unlimited)
+ * - Indices/Sectors/Commodities: Finnhub (demo fallback)
  */
 
 import { INDICES, SECTORS, COMMODITIES, CRYPTO } from '$lib/config/markets';
@@ -19,156 +18,99 @@ interface CoinGeckoPricesResponse {
 }
 
 interface FinnhubQuote {
-	c: number; // Current price
-	d: number; // Change
-	dp: number; // Percent change
-	h: number; // High price of the day
-	l: number; // Low price of the day
-	o: number; // Open price of the day
-	pc: number; // Previous close price
-	t: number; // Timestamp
+	c: number;
+	d: number;
+	dp: number;
+	h: number;
+	l: number;
+	o: number;
+	pc: number;
+	t: number;
 }
 
 /**
- * Check if Finnhub API key is configured
- */
-function hasFinnhubApiKey(): boolean {
-	return Boolean(FINNHUB_API_KEY && FINNHUB_API_KEY.length > 0 && !FINNHUB_API_KEY.includes('your_api_key'));
-}
-
-/**
- * Demo/Mock data for when API is not available
- * Provides realistic market data for demonstration purposes
+ * Demo data for indices/sectors/commodities (Finnhub fallback)
  */
 const DEMO_DATA = {
-	// Index ETFs (raw ETF prices, will be converted to index values)
 	indices: {
-		'DIA': { c: 438.50, d: 1.25, dp: 0.29 },    // Dow ETF
-		'SPY': { c: 605.50, d: 1.25, dp: 0.21 },    // S&P 500 ETF
-		'QQQ': { c: 615.00, d: 2.50, dp: 0.41 },    // NASDAQ-100 ETF (~23,000 / 37.5)
-		'IWM': { c: 223.40, d: -0.85, dp: -0.38 }   // Russell 2000 ETF
+		'DIA': { c: 438.50, d: 1.25, dp: 0.29 },
+		'SPY': { c: 605.50, d: 1.25, dp: 0.21 },
+		'QQQ': { c: 615.00, d: 2.50, dp: 0.41 },
+		'IWM': { c: 223.40, d: -0.85, dp: -0.38 }
 	},
-	// Sector ETFs
 	sectors: {
-		'XLK': { c: 247.50, d: 1.85, dp: 0.75 },    // Technology
-		'XLF': { c: 50.25, d: 0.15, dp: 0.30 },     // Financials
-		'XLE': { c: 96.80, d: -0.45, dp: -0.46 },   // Energy
-		'XLI': { c: 138.20, d: 0.42, dp: 0.30 },    // Industrials
-		'XLP': { c: 81.50, d: 0.08, dp: 0.10 },     // Consumer Staples
-		'XLRE': { c: 43.85, d: -0.12, dp: -0.27 },  // Real Estate
-		'XLU': { c: 77.40, d: 0.25, dp: 0.32 },     // Utilities
-		'XLB': { c: 92.15, d: 0.35, dp: 0.38 },     // Materials
-		'XLC': { c: 88.60, d: 0.55, dp: 0.62 },     // Communication
-		'XLV': { c: 149.30, d: -0.25, dp: -0.17 }   // Health Care
+		'XLK': { c: 247.50, d: 1.85, dp: 0.75 },
+		'XLF': { c: 50.25, d: 0.15, dp: 0.30 },
+		'XLE': { c: 96.80, d: -0.45, dp: -0.46 },
+		'XLI': { c: 138.20, d: 0.42, dp: 0.30 },
+		'XLP': { c: 81.50, d: 0.08, dp: 0.10 },
+		'XLRE': { c: 43.85, d: -0.12, dp: -0.27 },
+		'XLU': { c: 77.40, d: 0.25, dp: 0.32 },
+		'XLB': { c: 92.15, d: 0.35, dp: 0.38 },
+		'XLC': { c: 88.60, d: 0.55, dp: 0.62 },
+		'XLV': { c: 149.30, d: -0.25, dp: -0.17 }
 	},
-	// Commodity proxies
 	commodities: {
-		'VIXY': { c: 12.85, d: -0.35, dp: -2.65 },  // VIX proxy
-		'GLD': { c: 268.50, d: 2.15, dp: 0.81 },    // Gold
-		'USO': { c: 78.25, d: -0.45, dp: -0.57 },   // Oil
-		'UNG': { c: 14.35, d: 0.08, dp: 0.56 },     // Natural Gas
-		'SLV': { c: 29.80, d: 0.25, dp: 0.84 },     // Silver
-		'CPER': { c: 28.45, d: 0.12, dp: 0.42 }     // Copper
-	},
-	// Crypto (approximate values)
-	crypto: {
-		'bitcoin': { usd: 98500, usd_24h_change: 2.35 },
-		'ethereum': { usd: 3780, usd_24h_change: 1.85 },
-		'solana': { usd: 218, usd_24h_change: 4.20 }
+		'VIXY': { c: 12.85, d: -0.35, dp: -2.65 },
+		'GLD': { c: 268.50, d: 2.15, dp: 0.81 },
+		'USO': { c: 78.25, d: -0.45, dp: -0.57 },
+		'UNG': { c: 14.35, d: 0.08, dp: 0.56 },
+		'SLV': { c: 29.80, d: 0.25, dp: 0.84 },
+		'CPER': { c: 28.45, d: 0.12, dp: 0.42 }
 	}
 };
 
-// Map index symbols to ETF proxies (free tier doesn't support direct indices)
 const INDEX_ETF_MAP: Record<string, string> = {
-	'^DJI': 'DIA', // Dow Jones -> SPDR Dow Jones ETF
-	'^GSPC': 'SPY', // S&P 500 -> SPDR S&P 500 ETF
-	'^IXIC': 'QQQ', // NASDAQ -> Invesco QQQ (NASDAQ-100)
-	'^RUT': 'IWM' // Russell 2000 -> iShares Russell 2000 ETF
+	'^DJI': 'DIA',
+	'^GSPC': 'SPY',
+	'^IXIC': 'QQQ',
+	'^RUT': 'IWM'
 };
 
-/**
- * ETF to Index conversion factors
- * Since we fetch ETF prices but want to display actual index values,
- * we multiply ETF prices by these approximate conversion factors
- */
 const ETF_TO_INDEX_MULTIPLIERS: Record<string, number> = {
-	'DIA': 100,    // DIA ETF price * 100 ≈ Dow Jones
-	'SPY': 10,     // SPY ETF price * 10 ≈ S&P 500
-	'QQQ': 37.5,   // QQQ ETF price * 37.5 ≈ NASDAQ Composite
-	'IWM': 8.5     // IWM ETF price * 8.5 ≈ Russell 2000
+	'DIA': 100,
+	'SPY': 10,
+	'QQQ': 37.5,
+	'IWM': 8.5
 };
 
-/**
- * Internal implementation to fetch a quote from Finnhub
- */
-async function fetchFinnhubQuoteInternal(symbol: string): Promise<FinnhubQuote | null> {
-	try {
-		const url = `${FINNHUB_BASE_URL}/quote?symbol=${encodeURIComponent(symbol)}&token=${FINNHUB_API_KEY}`;
-		const response = await fetch(url);
-
-		if (!response.ok) {
-			throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-		}
-
-		const data: FinnhubQuote = await response.json();
-
-		// Finnhub returns all zeros when symbol not found
-		if (data.c === 0 && data.pc === 0) {
-			return null;
-		}
-
-		return data;
-	} catch (error) {
-		logger.error('Markets API', `Error fetching quote for ${symbol}:`, error);
-		return null;
-	}
-}
+// ============ COINGECKO (免费，无限制) ============
 
 /**
- * Public API to fetch a quote from Finnhub
- * Exported for use by panels like MoveIndexPanel
- */
-export async function fetchFinnhubQuote(symbol: string): Promise<FinnhubQuote | null> {
-	return await fetchFinnhubQuoteInternal(symbol);
-}
-
-/**
- * Fetch crypto prices from CoinGecko via proxy
- * Falls back to demo data if API fails
+ * Fetch crypto prices from CoinGecko
+ * API: https://www.coingecko.com/en/api
+ * Free tier: Unlimited requests
  */
 export async function fetchCryptoPrices(): Promise<CryptoItem[]> {
 	const createDemoCrypto = () =>
-		CRYPTO.map((c) => {
-			const demo = DEMO_DATA.crypto[c.id as keyof typeof DEMO_DATA.crypto];
-			return {
-				id: c.id,
-				symbol: c.symbol,
-				name: c.name,
-				current_price: demo?.usd ?? 0,
-				price_change_24h: demo?.usd_24h_change ?? 0,
-				price_change_percentage_24h: demo?.usd_24h_change ?? 0
-			};
-		});
+		CRYPTO.map((c) => ({
+			id: c.id,
+			symbol: c.symbol,
+			name: c.name,
+			current_price: 0,
+			price_change_24h: 0,
+			price_change_percentage_24h: 0
+		}));
 
 	try {
 		const ids = CRYPTO.map((c) => c.id).join(',');
 		const coinGeckoUrl = `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`;
 
-		logger.log('Markets API', 'Fetching crypto from CoinGecko');
+		logger.log('Crypto', 'Fetching from CoinGecko');
 
-		const response = await fetchWithProxy(coinGeckoUrl);
+		const response = await fetch(coinGeckoUrl, {
+			headers: { 'Accept': 'application/json' },
+			signal: AbortSignal.timeout(10000)
+		});
+
 		if (!response.ok) {
-			throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+			logger.warn('Crypto', `API returned ${response.status}, using demo data`);
+			return createDemoCrypto();
 		}
 
 		const data: CoinGeckoPricesResponse = await response.json();
-
-		// Check if we got valid data
-		const hasValidData = Object.values(data).some((priceData) => priceData?.usd > 0);
-		if (!hasValidData) {
-			logger.warn('Markets API', 'No valid crypto data from API, using demo data');
-			return createDemoCrypto();
-		}
+		const hasValidData = Object.values(data).some((p) => p?.usd > 0);
+		if (!hasValidData) return createDemoCrypto();
 
 		return CRYPTO.map((crypto) => {
 			const priceData = data[crypto.id];
@@ -182,82 +124,85 @@ export async function fetchCryptoPrices(): Promise<CryptoItem[]> {
 			};
 		});
 	} catch (error) {
-		logger.error('Markets API', 'Error fetching crypto, using demo data:', error);
+		logger.error('Crypto', 'Error fetching from CoinGecko:', error);
 		return createDemoCrypto();
 	}
 }
 
+// ============ FINNHUB (付费/演示) ============
+
+async function getFinnhubQuote(symbol: string): Promise<FinnhubQuote | null> {
+	if (!FINNHUB_API_KEY) return null;
+
+	try {
+		const url = `${FINNHUB_BASE_URL}/quote?symbol=${encodeURIComponent(symbol)}&token=${FINNHUB_API_KEY}`;
+		const response = await fetch(url);
+		if (!response.ok) return null;
+
+		const data: FinnhubQuote = await response.json();
+		return (data.c === 0 && data.pc === 0) ? null : data;
+	} catch (error) {
+		logger.error('Finnhub', `Error fetching ${symbol}:`, error);
+		return null;
+	}
+}
+
 /**
- * Fetch market indices from Finnhub
- * Falls back to demo data if API key is not available
+ * Export Finnhub quote for external use
  */
+export async function fetchFinnhubQuote(symbol: string): Promise<FinnhubQuote | null> {
+	return getFinnhubQuote(symbol);
+}
+
 export async function fetchIndices(): Promise<MarketItem[]> {
-	const createDemoIndices = () =>
+	const createDemo = () =>
 		INDICES.map((i) => {
-			const etfSymbol = INDEX_ETF_MAP[i.symbol] || i.symbol;
-			const demo = DEMO_DATA.indices[etfSymbol as keyof typeof DEMO_DATA.indices];
-			const multiplier = ETF_TO_INDEX_MULTIPLIERS[etfSymbol] || 1;
+			const etf = INDEX_ETF_MAP[i.symbol] || i.symbol;
+			const demo = DEMO_DATA.indices[etf as keyof typeof DEMO_DATA.indices];
+			const mult = ETF_TO_INDEX_MULTIPLIERS[etf] || 1;
 			return {
 				symbol: i.symbol,
 				name: i.name,
-				// Convert demo ETF price to index value
-				price: (demo?.c ?? NaN) * multiplier,
-				change: (demo?.d ?? NaN) * multiplier,
+				price: (demo?.c ?? NaN) * mult,
+				change: (demo?.d ?? NaN) * mult,
 				changePercent: demo?.dp ?? NaN,
 				type: 'index' as const
 			};
 		});
 
-	if (!hasFinnhubApiKey()) {
-		logger.log('Markets API', 'Using demo data for indices (API key not configured)');
-		return createDemoIndices();
-	}
+	if (!FINNHUB_API_KEY) return createDemo();
 
 	try {
-		logger.log('Markets API', 'Fetching indices from Finnhub');
-
 		const quotes = await Promise.all(
 			INDICES.map(async (index) => {
-				const etfSymbol = INDEX_ETF_MAP[index.symbol] || index.symbol;
-				const quote = await fetchFinnhubQuoteInternal(etfSymbol);
-				return { index, quote, etfSymbol };
+				const etf = INDEX_ETF_MAP[index.symbol] || index.symbol;
+				const quote = await getFinnhubQuote(etf);
+				return { index, quote, etf };
 			})
 		);
 
-		// Check if we got valid data, otherwise use demo
-		const hasValidData = quotes.some(({ quote }) => quote && quote.c > 0);
-		if (!hasValidData) {
-			logger.warn('Markets API', 'No valid data from API, using demo data for indices');
-			return createDemoIndices();
-		}
+		const hasValid = quotes.some((q) => q.quote?.c > 0);
+		if (!hasValid) return createDemo();
 
-		// Convert ETF prices to actual index values
-		return quotes.map(({ index, quote, etfSymbol }) => {
-			const multiplier = ETF_TO_INDEX_MULTIPLIERS[etfSymbol] || 1;
+		return quotes.map(({ index, quote, etf }) => {
+			const mult = ETF_TO_INDEX_MULTIPLIERS[etf] || 1;
 			return {
 				symbol: index.symbol,
 				name: index.name,
-				// Convert ETF price to index value
-				price: (quote?.c ?? NaN) * multiplier,
-				// Change amount also needs conversion
-				change: (quote?.d ?? NaN) * multiplier,
-				// Percent change stays the same
+				price: (quote?.c ?? NaN) * mult,
+				change: (quote?.d ?? NaN) * mult,
 				changePercent: quote?.dp ?? NaN,
 				type: 'index' as const
 			};
 		});
 	} catch (error) {
-		logger.error('Markets API', 'Error fetching indices, using demo data:', error);
-		return createDemoIndices();
+		logger.error('Indices', 'Error:', error);
+		return createDemo();
 	}
 }
 
-/**
- * Fetch sector performance from Finnhub (using sector ETFs)
- * Falls back to demo data if API key is not available
- */
 export async function fetchSectorPerformance(): Promise<SectorPerformance[]> {
-	const createDemoSectors = () =>
+	const createDemo = () =>
 		SECTORS.map((s) => {
 			const demo = DEMO_DATA.sectors[s.symbol as keyof typeof DEMO_DATA.sectors];
 			return {
@@ -269,27 +214,18 @@ export async function fetchSectorPerformance(): Promise<SectorPerformance[]> {
 			};
 		});
 
-	if (!hasFinnhubApiKey()) {
-		logger.log('Markets API', 'Using demo data for sectors (API key not configured)');
-		return createDemoSectors();
-	}
+	if (!FINNHUB_API_KEY) return createDemo();
 
 	try {
-		logger.log('Markets API', 'Fetching sector performance from Finnhub');
-
 		const quotes = await Promise.all(
-			SECTORS.map(async (sector) => {
-				const quote = await fetchFinnhubQuoteInternal(sector.symbol);
-				return { sector, quote };
-			})
+			SECTORS.map(async (sector) => ({
+				sector,
+				quote: await getFinnhubQuote(sector.symbol)
+			}))
 		);
 
-		// Check if we got valid data, otherwise use demo
-		const hasValidData = quotes.some(({ quote }) => quote && quote.c > 0);
-		if (!hasValidData) {
-			logger.warn('Markets API', 'No valid data from API, using demo data for sectors');
-			return createDemoSectors();
-		}
+		const hasValid = quotes.some((q) => q.quote?.c > 0);
+		if (!hasValid) return createDemo();
 
 		return quotes.map(({ sector, quote }) => ({
 			symbol: sector.symbol,
@@ -299,30 +235,25 @@ export async function fetchSectorPerformance(): Promise<SectorPerformance[]> {
 			changePercent: quote?.dp ?? NaN
 		}));
 	} catch (error) {
-		logger.error('Markets API', 'Error fetching sectors, using demo data:', error);
-		return createDemoSectors();
+		logger.error('Sectors', 'Error:', error);
+		return createDemo();
 	}
 }
 
-// Finnhub commodity ETF proxies (free tier doesn't support direct commodities)
-const COMMODITY_SYMBOL_MAP: Record<string, string> = {
-	'^VIX': 'VIXY', // VIX -> ProShares VIX Short-Term Futures ETF
-	'GC=F': 'GLD', // Gold -> SPDR Gold Shares
-	'CL=F': 'USO', // Crude Oil -> United States Oil Fund
-	'NG=F': 'UNG', // Natural Gas -> United States Natural Gas Fund
-	'SI=F': 'SLV', // Silver -> iShares Silver Trust
-	'HG=F': 'CPER' // Copper -> United States Copper Index Fund
+const COMMODITY_MAP: Record<string, string> = {
+	'^VIX': 'VIXY',
+	'GC=F': 'GLD',
+	'CL=F': 'USO',
+	'NG=F': 'UNG',
+	'SI=F': 'SLV',
+	'HG=F': 'CPER'
 };
 
-/**
- * Fetch commodities from Finnhub
- * Falls back to demo data if API key is not available
- */
 export async function fetchCommodities(): Promise<MarketItem[]> {
-	const createDemoCommodities = () =>
+	const createDemo = () =>
 		COMMODITIES.map((c) => {
-			const finnhubSymbol = COMMODITY_SYMBOL_MAP[c.symbol] || c.symbol;
-			const demo = DEMO_DATA.commodities[finnhubSymbol as keyof typeof DEMO_DATA.commodities];
+			const finnhub = COMMODITY_MAP[c.symbol] || c.symbol;
+			const demo = DEMO_DATA.commodities[finnhub as keyof typeof DEMO_DATA.commodities];
 			return {
 				symbol: c.symbol,
 				name: c.name,
@@ -333,28 +264,21 @@ export async function fetchCommodities(): Promise<MarketItem[]> {
 			};
 		});
 
-	if (!hasFinnhubApiKey()) {
-		logger.log('Markets API', 'Using demo data for commodities (API key not configured)');
-		return createDemoCommodities();
-	}
+	if (!FINNHUB_API_KEY) return createDemo();
 
 	try {
-		logger.log('Markets API', 'Fetching commodities from Finnhub');
-
 		const quotes = await Promise.all(
 			COMMODITIES.map(async (commodity) => {
-				const finnhubSymbol = COMMODITY_SYMBOL_MAP[commodity.symbol] || commodity.symbol;
-				const quote = await fetchFinnhubQuoteInternal(finnhubSymbol);
-				return { commodity, quote };
+				const finnhub = COMMODITY_MAP[commodity.symbol] || commodity.symbol;
+				return {
+					commodity,
+					quote: await getFinnhubQuote(finnhub)
+				};
 			})
 		);
 
-		// Check if we got valid data, otherwise use demo
-		const hasValidData = quotes.some(({ quote }) => quote && quote.c > 0);
-		if (!hasValidData) {
-			logger.warn('Markets API', 'No valid data from API, using demo data for commodities');
-			return createDemoCommodities();
-		}
+		const hasValid = quotes.some((q) => q.quote?.c > 0);
+		if (!hasValid) return createDemo();
 
 		return quotes.map(({ commodity, quote }) => ({
 			symbol: commodity.symbol,
@@ -365,22 +289,17 @@ export async function fetchCommodities(): Promise<MarketItem[]> {
 			type: 'commodity' as const
 		}));
 	} catch (error) {
-		logger.error('Markets API', 'Error fetching commodities, using demo data:', error);
-		return createDemoCommodities();
+		logger.error('Commodities', 'Error:', error);
+		return createDemo();
 	}
 }
 
-interface AllMarketsData {
+export async function fetchAllMarkets(): Promise<{
 	crypto: CryptoItem[];
 	indices: MarketItem[];
 	sectors: SectorPerformance[];
 	commodities: MarketItem[];
-}
-
-/**
- * Fetch all market data
- */
-export async function fetchAllMarkets(): Promise<AllMarketsData> {
+}> {
 	const [crypto, indices, sectors, commodities] = await Promise.all([
 		fetchCryptoPrices(),
 		fetchIndices(),
